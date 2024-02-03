@@ -8,9 +8,9 @@ dashboardPage(
   
   dashboardSidebar(sidebarMenu(
                      id = "sidebartabs",
+                     menuItem("Project Admin", tabName = "project_admin", icon = icon("list-check")),
                      menuItem("Timeline Overview",tabName = "timeline_overview", icon = icon("timeline")),
                      menuItem("Project Planner", tabName = "project_planner", icon = icon("calendar-days")),
-                     menuItem("Project Admin", tabName = "project_admin", icon = icon("list-check")),
                      menuItem("Purchases", tabName = "purchases", icon = icon("cart-shopping")),
                      menuItem("User Management", tabName = "user_management", icon = icon("users"))
                    )
