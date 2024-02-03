@@ -1,0 +1,348 @@
+@import url('https://fonts.googleapis.com/css?family=Raleway'); 
+
+@import url('https://fonts.googleapis.com/css?family=Roboto'); 
+input[type="number"] {
+  max-width: 80%;
+}
+/* Table header and body */
+th { font-size: 14px; }
+td { font-size: 14px; }
+
+/*div.outer {
+  position: fixed;
+  top: 41px;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  overflow: hidden;
+  padding: 0;
+  transform:scale(2);
+}
+*/
+/* Customize fonts */
+body, label, input, button, select { 
+  font-family: 'Roboto', sans-serif;
+  /* font-weight: 100;*/
+  font-size: 14px;
+}
+
+.centered-modal-content {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  text-align: center;
+  height: 100%; /* Set the height to 100% to center vertically */
+}
+
+/*h1, h2, h3, h4 { font-weight: 200;  font-size: 10px;}*/
+#controls {
+  /* Appearance */
+  background-color: white;
+  padding: 0 20px 20px 20px;
+  cursor: move;
+  /* Fade out while not hovering */
+  opacity: 0.50;
+  /*zoom: 0.9;*/
+  transition: opacity 500ms 0.2s;
+}
+#controls:hover {
+  /* Fade in while hovering */
+  opacity: 0.95;
+  transition-delay: 0;
+}
+/* Position and style citation */
+#cite {
+  position: absolute;
+  bottom: 10px;
+  left: 10px;
+  font-size: 14px;
+}
+/* If not using map tiles, show a white background */
+.leaflet-container {
+  background-color: white !important;
+}
+/* OC 1400a6 . Darker OC 0A0059 */
+
+.main-header .logo {
+	background-color: #011F5B !important;
+	border-right: 1px;
+}
+.main-header .navbar {
+	background-color: #011F5B !important;
+}
+.main-header .sidebar-toggle {
+	color: white !important;
+}
+.main-sidebar {
+	background-color: #011F5B !important;
+	height: 50%;
+  position: fixed;
+  overflow-y: scroll;
+}
+.sidebar {
+	overflow-y: hidden;
+}
+.main-sidebar .box {
+	background-color: #011F5B !important;
+}
+
+.row {UI
+  padding: 0px 5px 0px 5px;
+}
+
+div[class^="col-sm"] {
+  padding: 0px 5px 0px 5px;
+}
+
+.box {
+    font-family:  'Roboto', sans-serif;
+    position: relative;
+    border-radius: 8px;
+    background: #fff;
+    border: 5px solid #FFA500;
+    margin-bottom: 10px;
+    padding: 5px;
+    width: 100%;
+    box-shadow: 0 5px 5px 5px rgb(255 165 0 / 10%);
+}
+
+.custom-output {
+  display: inline-block;
+  width: 200px;
+  background-color: white;
+  font-family:  'Roboto', sans-serif;
+}
+
+#signinboxes .col-sm-8 {
+    position: relative;
+    left: 18em;
+}
+
+html::-webkit-scrollbar, .main-sidebar::-webkit-scrollbar {
+    background: rgb(136, 136, 136);
+    width: 10px;
+  }
+
+html::-webkit-scrollbar-track, .main-sidebar::-webkit-scrollbar-track {
+    background: #011F5B;
+}
+
+
+
+html::-webkit-scrollbar-thumb, .main-sidebar::-webkit-scrollbar-thumb {
+    border-radius: 10px;
+    background: rgb(136, 136, 136);
+    opacity: 60%;
+  }
+
+html::-webkit-scrollbar:hover, .main-sidebar::-webkit-scrollbar-thumb:hover {
+    background: rgb(100, 100, 100);
+    border-radius: 10px;
+  }
+
+html::-webkit-scrollbar:active, .main-sidebar::-webkit-scrollbar-thumb:active {
+    background: rgb(68, 68, 68);
+    border-radius: 10px;
+  }
+
+body {
+  font-family:  'Roboto', sans-serif;
+  background-color: #011F5B;
+}
+
+.content {
+  background-color: #011F5B;
+}
+
+.content-wrapper, .right-side {
+    background-color: #011F5B;
+}
+
+h3 {
+    font-family:  'Roboto', sans-serif;
+    font-size: 18px;
+    font-weight: bold;
+    align-content: center;
+}
+
+.box-header .box-title {
+    font-family:  'Roboto', sans-serif;
+    font-size: 15px;
+    font-weight: bold;
+    align-content: center;
+}
+
+h2 {
+    font-family:  'Roboto', sans-serif;
+    font-size: 26px;
+    font-weight: bold;
+    align-content: center;
+}
+
+/* Styling for Whats-App style chat boxes.*/
+.wa-textbox {
+  border-color: #000000;
+  border-style: solid;
+  border-width: 2px;
+  overflow-y: auto;
+  overflow-anchor: none;
+  max-height: 600px;
+}
+
+.wa-usermsg {
+  text-align: left;
+  padding-left: 2px;
+  padding-right: 40%;
+  margin-bottom: 5px;
+}
+
+.me-eventmsg {
+  text-align:left;
+  padding-left: 2px;
+  padding-right: 2px;
+  margin-bottom: 5px;
+}
+
+.me-eventmsg:nth-child(even){
+  background-color: #BBBBBB;
+}
+
+.wa-fvmsg {
+  text-align: left;
+  background-color: #D8FBD2;
+  padding-right: 2px;
+  padding-left: 40%;
+  margin-bottom: 5px;
+}
+
+.wa-date {
+  text-align: center;
+  background-color: #BBBBBB;
+}
+
+.wa-anchor{
+  overflow-anchor: auto;
+  height: 1px;
+}
+
+.static-fv-header {
+  align-content: inline-box;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.stops-list {
+  overflow-y: auto;
+  overflow-anchor: none;
+  max-height: 800px;
+}
+
+.skin-blue .main-header .navbar .sidebar-toggle:hover{
+ background-color: orange;
+ border-right: 0px;
+}
+
+.clockout {
+  font-family:  'Roboto', sans-serif;
+  position: relative;
+  color: #fff; 
+  margin-bottom: 20px;
+  background-color: #b30c0c; 
+  border-color: #b30c0c; 
+  font-size: 14px; 
+  width: 100%;
+}
+
+.break {
+  font-family:  'Roboto', sans-serif;
+  position: relative;
+  color: #fff; 
+  margin-bottom: 10px;
+  background-color: green; 
+  border-color: green; 
+  font-size: 14px; 
+  width: 100%;
+}
+
+.lunch {
+  font-family:  'Roboto', sans-serif;
+  position: relative;
+  color: #fff; 
+  margin-bottom: 10px;
+  background-color: orange; 
+  border-color: orange; 
+  font-size: 14px; 
+  width: 100%;
+}
+
+.back {
+  font-family:  'Roboto', sans-serif;
+  position: relative;
+  margin-left: 10px;
+  color: #fff; 
+  margin-bottom: 10px;
+  background-color: #011F5B; 
+  border-color: #011F5B; 
+  font-size: 14px; 
+}
+
+.back:hover{
+ background-color: orange;
+  border-color: orange; 
+ border-right: 0px;
+}
+
+.apply {
+  font-family:  'Roboto', sans-serif;
+  color: #fff; 
+  margin-bottom: 10px;
+  background-color: orange; 
+  border-color: orange; 
+}
+
+.apply:hover{
+  color: #fff; 
+ background-color: #011F5B;
+  border-color: #011F5B; 
+}
+
+.apply:click{
+  color: #fff; 
+ background-color: #011F5B;
+  border-color: #011F5B; 
+}
+
+.add_proj {
+  font-family:  'Roboto', sans-serif;
+  position: relative;
+  margin-left: 10px;
+  float: right;
+  color: #fff; 
+  margin-bottom: 10px;
+  background-color: #011F5B; 
+  border-color: #011F5B; 
+  font-size: 14px; 
+}
+
+.add_proj:hover{
+ background-color: orange;
+  border-color: orange; 
+ border-right: 0px;
+}
+
+.custom_chkbx label {
+  color:white;
+}
+
+.checkbox input:checked + .control-indicator {
+        background-color: #011F5B !important; 
+      }
+      
+.small-box {
+  height: 510px !important;}
+  
+.small-box .icon-large {
+  font-size: 360px !important;
+}
