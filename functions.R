@@ -303,7 +303,7 @@ uploadToGoogleDrive <- function(image_binary, project_name, folder_name) {
 create_order <- function(message_details, drive_link = NULL) {
   projNumber <- substr(message_details$text, 2, 5)
   itemDescription <- substr(message_details$text, 7, nchar(message_details$text))
-  from <- dbGetQuery(con(), paste0("SELECT name FROM active_ts WHERE wa_number = '",message_details$from,"';"))$name
+  from <- (dbGetQuery(con(), paste0("SELECT name FROM active_ts WHERE wa_number = '",message_details$from,"';"))$name)[1]
   projectName <- dbGetQuery(con(), paste0("SELECT projectname FROM projects WHERE projectname LIKE '", projNumber, "%';"))$projectname
   
   if (is.null(drive_link)) {
@@ -338,7 +338,7 @@ create_order <- function(message_details, drive_link = NULL) {
 add_note <- function(df) {
   projNumber <- substr(df$text, 2, 5)
   note <- substr(df$text, 7, nchar(df$text))
-  from <- dbGetQuery(con(), paste0("SELECT name FROM active_ts WHERE wa_number = '",df$from,"';"))$name
+  from <- (dbGetQuery(con(), paste0("SELECT name FROM active_ts WHERE wa_number = '",df$from,"';"))$name)[1]
   projectName <- dbGetQuery(con(), paste0("SELECT projectname FROM projects WHERE projectname LIKE '", projNumber, "%';"))$projectname
   existingNotes <- dbGetQuery(con(), paste0("SELECT notes FROM projects WHERE projectname = '", projectName, "';"))$notes
   if (!is.na(existingNotes)) {note = paste0(existingNotes, "   ", note)}
