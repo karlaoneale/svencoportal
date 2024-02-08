@@ -352,9 +352,8 @@ add_note <- function(df) {
     list('type' = 'text', 'text' = projectName),
     list('type' = 'text', 'text' = note)
   )
-  
   pm <- dbGetQuery(con(), paste0("SELECT wa_number FROM active_ts WHERE pm = 'true';"))$wa_number
-  if (pm != from) sent_to_pm <- send_template(pm, body_params, "new_note", project = projectName)
+  if (is.na(from) || pm != from) sent_to_pm <- send_template(pm, body_params, "new_note", project = projectName)
   else sent_to_pm <- TRUE
   
   
