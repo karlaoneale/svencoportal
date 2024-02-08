@@ -975,13 +975,13 @@ server <- function(input, output, session) {
           colour = task_colors[input$task_name]
         )
         
-        tasks_sheet(rbind(tasks_sheet(), new_item))
-        proj_timevis_data(updateProjTimevis(tasks_sheet() %>% filter(projectname == input$proj_plan)))
         dbExecute(con(), paste0("INSERT INTO tasks (taskid, projectname, taskname, description, status, employee, 
                               plannedstart, plannedcompletion, colour) VALUES (", new_item$taskid, ",'",new_item$projectname,
                                 "','", new_item$taskname, "', '", new_item$description,"', '", new_item$status, "', '", 
                                 new_item$employee,  "', '", new_item$plannedstart, "', '", 
                                 new_item$plannedcompletion, "', '", new_item$colour, "');"))
+        tasks_sheet(dbGetQuery(con(), "SELECT * FROM tasks"))
+        proj_timevis_data(updateProjTimevis(tasks_sheet() %>% filter(projectname == input$proj_plan)))
         shiny::removeModal()
       })
       
