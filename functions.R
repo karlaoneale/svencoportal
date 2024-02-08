@@ -276,6 +276,7 @@ get_WA_image_and_upload <- function(df, folder_name, project_name) {
 }
 
 uploadToGoogleDrive <- function(image_binary, project_name, folder_name) {
+  drive_auth(path = google_drive_service_acc)
   temp_image <- tempfile(fileext = ".jpg")
   writeBin(image_binary, temp_image)
   path <- paste0(folder_name,"/",project_name,"/")
@@ -327,6 +328,7 @@ create_order <- function(message_details, drive_link = NULL) {
     sent_to_admin <- send_template(admin, body_params, "new_order", project = projectName, orderid = orderid)
     send_template(admin, body_params, "new_order_pm", project = projectName, orderid = orderid)
   } else {
+    drive_auth(path = google_drive_service_acc)
     header <- list('type' = 'image', 'image' = list('id' = message_details$attachmentid))
     sent_to_admin <- send_template(admin, body_params, "new_order_image", heading = header ,project = projectName, orderid = orderid)
     send_template(admin, body_params, "new_order_pm_image", heading = header, project = projectName, orderid = orderid)

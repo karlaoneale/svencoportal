@@ -23,10 +23,7 @@ library(RCurl)
 
 source("functions.R")
 
-gs4_auth(email = "karlaschoeman@gmail.com", path = "project-manager-401415-9567152d79df.json")
-project_sheet_id <- "1RkVgAHAKgBr1ykFodkIbjnUdbp-c2cfOkWsXbQ5KF5k"
-timeclock_sheet_id <- "1PR9S84ZkZToBl9y3aT-dQP4A8HwRtLisMb6uR9d5CFs"
-sheet_id <- "1PR9S84ZkZToBl9y3aT-dQP4A8HwRtLisMb6uR9d5CFs"
+google_drive_service_acc <- "svencoportal-46a05025cc4a.json"
 
 api_url <- "https://accounting.sageone.co.za/api/2.0.0/"
 username <- "karlaoneale@gmail.com"
