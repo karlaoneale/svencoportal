@@ -34,11 +34,11 @@ dashboardPage(
         tabName = "project_planner",
         fluidRow(
           div(
-            column(width = 2, div(class = "custom-selectize", selectizeInput(width = "250px", "proj_plan", label = NULL, choices=c("Loading...")))),
+            column(width = 4, div(class = "custom-selectize", selectizeInput(width = "400px", "proj_plan", label = NULL, choices=c("Loading...")))),
             #selectizeInput(width = "250px", "proj_plan", label = NULL, choices=c("Loading...")),
             column(width = 1, actionButton(inputId = "projAdminHelp", label = "",icon = icon("question"), class = "back", 
                                            onclick = "window.open('https://docs.google.com/document/d/1-xM7oF17Uzbx4fKCS0hfL2pqOU9pGMmshOmE0wuZFC8/edit?usp=sharing', '_blank')"),),
-            column(width = 7, actionButton(inputId = "refreshProjects", label = "",icon = icon("rotate-right"), class = "back")),
+            column(width = 5, actionButton(inputId = "refreshProjects", label = "",icon = icon("rotate-right"), class = "back")),
             #actionButton(inputId = "addTask", label = "Add Task",icon = icon("plus"), class = "add_proj")
             column(width = 2, actionButton(inputId = "addTask", label = "Add Task",icon = icon("plus"), class = "add_proj"))
           )),
@@ -109,6 +109,7 @@ dashboardPage(
           actionButton(inputId = "refreshProjAdmin", label = "",icon = icon("rotate-right"), class = "back"),
           actionButton(inputId = "projAdminHelp", label = "",icon = icon("question"), class = "back", 
                        onclick = "window.open('https://docs.google.com/document/d/1UjW5uidLSUVQG1h-7FpYQITXSfGcpn3wW9WZ5QKbMvU/edit?usp=sharing', '_blank')"),
+          actionButton(inputId = "update_proj_status", label = "Update Status", icon = icon("bars-progress"), class = "add_proj")
         ),
         box(
           title = "Project Administration", 

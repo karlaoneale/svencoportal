@@ -5,7 +5,7 @@ server <- function(input, output, session) {
   # Timer for connection of postgres every 4 mins
   postgresTimer <- reactiveTimer(1000*60*4)
   new_webhooks <- reactiveVal()
-  con <- reactiveVal(dbConnect(RPostgres::Postgres(), user = "ywwysyfrlfahov", password = "4cfd33e0e734d01c8a546ea97940c925e5d14ec94c5ab1058b8a8ecb62632fc0", host = "ec2-54-78-142-10.eu-west-1.compute.amazonaws.com", port = 5432, dbname = "dbgth3mnj5lvab"))
+  con <- reactiveVal(dbConnect(RPostgres::Postgres(), user = "ucr5l5kv090pne", password = "p54f2fdf2a84201889d0c2eb6e634624192bea1f1a7a1abf423bcb5c7ad2a982c", host = "ec2-54-194-134-97.eu-west-1.compute.amazonaws.com", port = 5432, dbname = "d6hsqvpeb3dbtf"))
   projects <- reactiveVal(get_projects(get_from_api("TimeTrackingProject","GetActiveProjects")))
   tasks_sheet <- reactiveVal()
   orders_data <- reactiveVal()
@@ -18,24 +18,35 @@ server <- function(input, output, session) {
   observe({
     postgresTimer()
     dbDisconnect(isolate(con()))
-    con(dbConnect(RPostgres::Postgres(), user = "ywwysyfrlfahov", password = "4cfd33e0e734d01c8a546ea97940c925e5d14ec94c5ab1058b8a8ecb62632fc0", host = "ec2-54-78-142-10.eu-west-1.compute.amazonaws.com", port = 5432, dbname = "dbgth3mnj5lvab"))
+    con(dbConnect(RPostgres::Postgres(), user = "ucr5l5kv090pne", password = "p54f2fdf2a84201889d0c2eb6e634624192bea1f1a7a1abf423bcb5c7ad2a982c", host = "ec2-54-194-134-97.eu-west-1.compute.amazonaws.com", port = 5432, dbname = "d6hsqvpeb3dbtf"))
   })
   
   sheet <- reactiveVal()
   tasks <- reactiveVal()
-  
-  observeEvent(input$switch_to_clock, {updateTabItems(session, "sidebartabs", selected = "clock")})
-  observeEvent(input$switch_to_proj_planner, {updateTabItems(session, "sidebartabs", selected = "project_planner")})
-  observeEvent(input$switch_to_tl_overview, {updateTabItems(session, "sidebartabs", selected = "timeline_overview")})
-  observeEvent(input$switch_to_proj_admin, {updateTabItems(session, "sidebartabs", selected = "project_admin")})
-  observeEvent(input$switch_to_user_management, {updateTabItems(session, "sidebartabs", selected = "user_management")})
-  observeEvent(input$switch_to_orders, {updateTabItems(session, "sidebartabs", selected = "purchases")})
+  proj_admin_table <- reactiveVal()
   
   # Project Admin page ----
   output$project_admin_table <- renderDT({
-    proj_sheet <- dbGetQuery(con(), "SELECT * FROM projects")
+    proj_sheet <- tryCatch({
+      proj_sheet <- dbGetQuery(con(), "SELECT * FROM projects")
+    }, 
+    error = function(e) {
+      con(dbConnect(RPostgres::Postgres(), user = "ucr5l5kv090pne", password = "p54f2fdf2a84201889d0c2eb6e634624192bea1f1a7a1abf423bcb5c7ad2a982c", host = "ec2-54-194-134-97.eu-west-1.compute.amazonaws.com", port = 5432, dbname = "d6hsqvpeb3dbtf"))
+      proj_sheet <- dbGetQuery(con(), "SELECT * FROM projects")
+    })
     projects(get_projects(get_from_api("TimeTrackingProject","GetActiveProjects")))
     missing_rows <- projects()[!(projects()$ID %in% proj_sheet$projectid), ]
+    inactive <- proj_sheet[!(proj_sheet$projectid %in% projects()$ID),]$projectid
+    inactive_values <- paste("'", inactive, "'", collapse = ", ")
+    if (length(inactive) > 0) {
+      tryCatch({
+        dbExecute(con(), "UPDATE projects SET active = FALSE WHERE projectid IN (", inactive_values, ")")
+      }, 
+      error = function(e) {
+        con(dbConnect(RPostgres::Postgres(), user = "ucr5l5kv090pne", password = "p54f2fdf2a84201889d0c2eb6e634624192bea1f1a7a1abf423bcb5c7ad2a982c", host = "ec2-54-194-134-97.eu-west-1.compute.amazonaws.com", port = 5432, dbname = "d6hsqvpeb3dbtf"))
+        dbExecute(con(), "UPDATE projects SET active = FALSE WHERE projectid IN (", inactive_values, ")")
+      })
+    }
     if (nrow(missing_rows)>0) {
       add <- data.frame(
         "projectid" = as.numeric(missing_rows$ID),
@@ -46,31 +57,181 @@ server <- function(input, output, session) {
         "lastupdate" = substr(missing_rows$StartDate, 0,10),
         "invoiceno" = NA,
         "images" = NA,
-        "notes" = NA
+        "notes" = NA,
+        "active" = TRUE
       )
       dbWriteTable(con(), "projects", add, append = TRUE, overwrite = FALSE)
     }
-    datatable(proj_sheet %>%
+    proj_admin_table(proj_sheet %>% arrange(desc(projectname)))
+    datatable(proj_admin_table() %>%
                 select(-projectid) %>%
-                arrange(desc(projectname)) %>% 
-                mutate(images = ifelse(images != "", paste0("<a href='", images,"' target='_blank'>View</a>"), images)),
-              colnames = c("Project Name", "Customer", "Status", "Added", "Last Update", "Invoice No.", "Images", "Notes"),
+                mutate(images = ifelse(images != "", paste0("<a href='", images,"' target='_blank'>View</a>"), images),
+                       active = ifelse(active, "&#10004;", "&#10060;")),
+              colnames = c("Project Name", "Customer", "Status", "Added", "Last Update", "Invoice No.", "Images", "Notes", "Active"),
               escape = FALSE)
   })
   
+  observeEvent(input$update_proj_status, {
+    if (length(input$project_admin_table_rows_selected)==0) show_alert("No project was selected.")
+    else {
+      if (length(input$project_admin_table_rows_selected)==1) choices <- c("Not Started", "In Progress", "Ready for QC", "To be Invoiced", "Invoiced")
+      else choices <- c("Not Started", "In Progress", "Ready for QC", "To be Invoiced")
+      modalDialog(
+        title = "Update the Status of Selected Projects",
+        div(
+          style = "display:inline-block",
+          radioGroupButtons(
+            "proj_status_update",
+            "Select status:",
+            choices = choices,
+            width = "270px"
+          )
+        ),
+        div(
+          id = "update_status_invoice_no",
+          style = "display:inline-block",
+          textInput(
+            "proj_status_update_inv",
+            "Enter Invoice Number:",
+            value = "INV22",
+            width = "270px"
+          )
+        ),
+        size = "s",
+        easyClose = FALSE,
+        footer = div(
+          class = "pull-right container",
+          actionButton(
+            inputId = "dismiss_modal",
+            label = "Close",
+            icon = icon("xmark"),
+            class = "add_proj"
+          ),
+          actionButton(
+            inputId = "confirm_proj_status_update",
+            label = "Update Status",
+            icon = icon("check"),
+            class = "back"
+          )
+        )
+      ) %>% showModal()
+    }
+    
+    
+    observeEvent(input$proj_status_update, {
+      if (input$proj_status_update == "Invoiced") shinyjs::show("update_status_invoice_no")
+      else shinyjs::hide("update_status_invoice_no")
+    })
+  })
+  
+  observeEvent(input$confirm_proj_status_update,{
+    projects <- proj_admin_table()[input$project_admin_table_rows_selected,]
+    projectids <- paste("'", projects$projectid, "'", collapse = ", ")
+    if (input$proj_status_update == "Invoiced") {
+      tryCatch({
+        dbExecute(con(), paste0("UPDATE projects SET status = '", input$proj_status_update, "', invoiceno = '",input$proj_status_update_inv,"' WHERE projectid IN (", projectids, ");"))
+      }, 
+      error = function(e) {
+        con(dbConnect(RPostgres::Postgres(), user = "ucr5l5kv090pne", password = "p54f2fdf2a84201889d0c2eb6e634624192bea1f1a7a1abf423bcb5c7ad2a982c", host = "ec2-54-194-134-97.eu-west-1.compute.amazonaws.com", port = 5432, dbname = "d6hsqvpeb3dbtf"))
+        dbExecute(con(), paste0("UPDATE projects SET status = '", input$proj_status_update, "', invoiceno = '",input$proj_status_update_inv,"' WHERE projectid IN (", projectids, ");"))
+      })
+    }
+    else {
+      tryCatch({
+        dbExecute(con(), paste0("UPDATE projects SET status = '", input$proj_status_update, "' WHERE projectid IN (", projectids, ");"))
+      }, 
+      error = function(e) {
+        con(dbConnect(RPostgres::Postgres(), user = "ucr5l5kv090pne", password = "p54f2fdf2a84201889d0c2eb6e634624192bea1f1a7a1abf423bcb5c7ad2a982c", host = "ec2-54-194-134-97.eu-west-1.compute.amazonaws.com", port = 5432, dbname = "d6hsqvpeb3dbtf"))
+        dbExecute(con(), paste0("UPDATE projects SET status = '", input$proj_status_update, "' WHERE projectid IN (", projectids, ");"))
+      })
+      
+      if (input$proj_status_update == "Ready for QC") {
+        for (i in 1:nrow(projects)) {
+          body <- list(
+            list("type" = "text", "text" = projects$projectname[i])
+          )
+          QC <- tryCatch({
+            QC <- dbGetQuery(con(), paste0("SELECT wa_number FROM active_ts WHERE pm = 'true';"))$wa_number
+          }, 
+          error = function(e) {
+            con(dbConnect(RPostgres::Postgres(), user = "ucr5l5kv090pne", password = "p54f2fdf2a84201889d0c2eb6e634624192bea1f1a7a1abf423bcb5c7ad2a982c", host = "ec2-54-194-134-97.eu-west-1.compute.amazonaws.com", port = 5432, dbname = "d6hsqvpeb3dbtf"))
+            QC <- dbGetQuery(con(), paste0("SELECT wa_number FROM active_ts WHERE pm = 'true';"))$wa_number
+          })
+          send_template(QC, body, "all_tasks_completed", project = projects$projectname[i])
+        }
+      }
+      if (input$proj_status_update == "To be Invoiced") {
+        for (i in 1:nrow(projects)) {
+          body <- list(
+            list("type" = "text", "text" = projects$projectname[i])
+          )
+          admin <- tryCatch({
+            admin <- dbGetQuery(con(), paste0("SELECT wa_number FROM active_ts WHERE ai = 'true';"))$wa_number
+          }, 
+          error = function(e) {
+            con(dbConnect(RPostgres::Postgres(), user = "ucr5l5kv090pne", password = "p54f2fdf2a84201889d0c2eb6e634624192bea1f1a7a1abf423bcb5c7ad2a982c", host = "ec2-54-194-134-97.eu-west-1.compute.amazonaws.com", port = 5432, dbname = "d6hsqvpeb3dbtf"))
+            admin <- dbGetQuery(con(), paste0("SELECT wa_number FROM active_ts WHERE ai = 'true';"))$wa_number
+          })
+          send_template(admin, body, "start_invoice", project = projects$projectname[i])
+          md <- tryCatch({
+            md <- dbGetQuery(con(), paste0("SELECT wa_number FROM active_ts WHERE md = 'true';"))$wa_number
+          }, 
+          error = function(e) {
+            con(dbConnect(RPostgres::Postgres(), user = "ucr5l5kv090pne", password = "p54f2fdf2a84201889d0c2eb6e634624192bea1f1a7a1abf423bcb5c7ad2a982c", host = "ec2-54-194-134-97.eu-west-1.compute.amazonaws.com", port = 5432, dbname = "d6hsqvpeb3dbtf"))
+            md <- dbGetQuery(con(), paste0("SELECT wa_number FROM active_ts WHERE md = 'true';"))$wa_number
+          })
+          send_template(md, body, template_name = 'md_project_completed', project = projects$projectname[i])
+        }
+      }
+    }
+    removeModal()
+  })
+  
   observeEvent(input$refreshProjAdmin, {
-    con(dbConnect(RPostgres::Postgres(), user = "ywwysyfrlfahov", password = "4cfd33e0e734d01c8a546ea97940c925e5d14ec94c5ab1058b8a8ecb62632fc0", host = "ec2-54-78-142-10.eu-west-1.compute.amazonaws.com", port = 5432, dbname = "dbgth3mnj5lvab"))
+    con(dbConnect(RPostgres::Postgres(), user = "ucr5l5kv090pne", password = "p54f2fdf2a84201889d0c2eb6e634624192bea1f1a7a1abf423bcb5c7ad2a982c", host = "ec2-54-194-134-97.eu-west-1.compute.amazonaws.com", port = 5432, dbname = "d6hsqvpeb3dbtf"))
   })
   
   # Orders page ----
   observeEvent(input$refreshOrders, {
-    if (input$include_received) orders_data(dbGetQuery(con(), paste0("SELECT * FROM orders;")))
-    else orders_data(dbGetQuery(con(), paste0("SELECT * FROM orders WHERE status != 'Arrived';")))
+    if (input$include_received) {
+      tryCatch({
+        orders_data(dbGetQuery(con(), paste0("SELECT * FROM orders;")))
+      }, 
+      error = function(e) {
+        con(dbConnect(RPostgres::Postgres(), user = "ucr5l5kv090pne", password = "p54f2fdf2a84201889d0c2eb6e634624192bea1f1a7a1abf423bcb5c7ad2a982c", host = "ec2-54-194-134-97.eu-west-1.compute.amazonaws.com", port = 5432, dbname = "d6hsqvpeb3dbtf"))
+        orders_data(dbGetQuery(con(), paste0("SELECT * FROM orders;")))
+      })
+    }
+    else {
+      tryCatch({
+        orders_data(dbGetQuery(con(), paste0("SELECT * FROM orders WHERE status != 'Arrived';")))
+      }, 
+      error = function(e) {
+        con(dbConnect(RPostgres::Postgres(), user = "ucr5l5kv090pne", password = "p54f2fdf2a84201889d0c2eb6e634624192bea1f1a7a1abf423bcb5c7ad2a982c", host = "ec2-54-194-134-97.eu-west-1.compute.amazonaws.com", port = 5432, dbname = "d6hsqvpeb3dbtf"))
+        orders_data(dbGetQuery(con(), paste0("SELECT * FROM orders WHERE status != 'Arrived';")))
+      })
+    }
   })
   
   output$order_table <- renderDT({
-    if (input$include_received) orders_data(dbGetQuery(con(), paste0("SELECT * FROM orders;")))
-    else orders_data(dbGetQuery(con(), paste0("SELECT * FROM orders WHERE status != 'Arrived';")))
+    if (input$include_received) {
+      tryCatch({
+        orders_data(dbGetQuery(con(), paste0("SELECT * FROM orders;")))
+      }, 
+      error = function(e) {
+        con(dbConnect(RPostgres::Postgres(), user = "ucr5l5kv090pne", password = "p54f2fdf2a84201889d0c2eb6e634624192bea1f1a7a1abf423bcb5c7ad2a982c", host = "ec2-54-194-134-97.eu-west-1.compute.amazonaws.com", port = 5432, dbname = "d6hsqvpeb3dbtf"))
+        orders_data(dbGetQuery(con(), paste0("SELECT * FROM orders;")))
+      })
+    }
+    else {
+      tryCatch({
+        orders_data(dbGetQuery(con(), paste0("SELECT * FROM orders WHERE status != 'Arrived';")))
+      }, 
+      error = function(e) {
+        con(dbConnect(RPostgres::Postgres(), user = "ucr5l5kv090pne", password = "p54f2fdf2a84201889d0c2eb6e634624192bea1f1a7a1abf423bcb5c7ad2a982c", host = "ec2-54-194-134-97.eu-west-1.compute.amazonaws.com", port = 5432, dbname = "d6hsqvpeb3dbtf"))
+        orders_data(dbGetQuery(con(), paste0("SELECT * FROM orders WHERE status != 'Arrived';")))
+      })
+    }
     datatable(orders_data() %>%
                 arrange(desc(datesubmitted)) %>%
                 mutate(
@@ -116,6 +277,16 @@ server <- function(input, output, session) {
           title = "Upload a Quote",
           div(
             style = "display:inline-block",
+            checkboxInput(
+              "approve_without_quotes",
+              "Submit for approval without quotes",
+              value = FALSE,
+              width = "270px"
+            )
+          ),
+          div(
+            id = "file_div",
+            style = "display:inline-block",
             fileInput(
               "quote_file",
               "Upload:",
@@ -124,11 +295,12 @@ server <- function(input, output, session) {
             )
           ),
           div(
+            id = "order_amount_div",
             style = "display:inline-block",
-            checkboxInput(
-              "get_quote_approval",
-              "Submit for approval",
-              value = TRUE,
+            numericInput(
+              "order_amount",
+              "Amount Needed in Rands:",
+              value = 0,
               width = "270px"
             )
           ),
@@ -145,12 +317,24 @@ server <- function(input, output, session) {
             ),
             actionButton(
               inputId = "upload_files",
-              label = "Complete Upload",
+              label = "Confirm",
               icon = icon("plus"),
               class = "back"
             )
           )
         ) %>% showModal()
+        
+        observeEvent(input$approve_without_quotes,{
+          if (input$approve_without_quotes) {
+            shinyjs::hide("file_div")
+            shinyjs::show("order_amount_div")
+          }
+          else {
+            shinyjs::show("file_div")
+            shinyjs::hide("order_amount_div")
+          }
+        })
+        
       } else if (selected_col %in% c("status", "courier", "eta")) {
         if (orders_selected_row()$status %in% c("Paid", "Order Go Ahead")) {
           modalDialog(
@@ -228,50 +412,144 @@ server <- function(input, output, session) {
   })
   
   observeEvent(input$complete_order, {
-    dbExecute(con(), paste0("UPDATE orders SET status = 'Arrived', lastupdate = '",
-                            format(Sys.Date(), format = "%d-%m-%Y"),
-                            "' WHERE id = ", orders_selected_row()$id, ";"))
-    wa_id <- dbGetQuery(con(), paste0("SELECT wa_number FROM active_ts WHERE name = '",orders_selected_row()$submittedby,"';"))$wa_number
+    tryCatch({
+      dbExecute(con(), paste0("UPDATE orders SET status = 'Arrived', lastupdate = '",
+                              format(Sys.Date(), format = "%d-%m-%Y"),
+                              "' WHERE id = ", orders_selected_row()$id, ";"))
+    }, 
+    error = function(e) {
+      con(dbConnect(RPostgres::Postgres(), user = "ucr5l5kv090pne", password = "p54f2fdf2a84201889d0c2eb6e634624192bea1f1a7a1abf423bcb5c7ad2a982c", host = "ec2-54-194-134-97.eu-west-1.compute.amazonaws.com", port = 5432, dbname = "d6hsqvpeb3dbtf"))
+      dbExecute(con(), paste0("UPDATE orders SET status = 'Arrived', lastupdate = '",
+                              format(Sys.Date(), format = "%d-%m-%Y"),
+                              "' WHERE id = ", orders_selected_row()$id, ";"))
+    })
+    wa_id <- tryCatch({
+      wa_id <- dbGetQuery(con(), paste0("SELECT wa_number FROM active_ts WHERE name = '",orders_selected_row()$submittedby,"';"))$wa_number
+    }, 
+    error = function(e) {
+      con(dbConnect(RPostgres::Postgres(), user = "ucr5l5kv090pne", password = "p54f2fdf2a84201889d0c2eb6e634624192bea1f1a7a1abf423bcb5c7ad2a982c", host = "ec2-54-194-134-97.eu-west-1.compute.amazonaws.com", port = 5432, dbname = "d6hsqvpeb3dbtf"))
+      wa_id <- dbGetQuery(con(), paste0("SELECT wa_number FROM active_ts WHERE name = '",orders_selected_row()$submittedby,"';"))$wa_number
+    })
     body_params <- list(
       list('type' = 'text', 'text' = orders_selected_row()$id),
       list('type' = 'text', 'text' = orders_selected_row()$itemdescription)
     )
     send_template(wa_id, body_params = body_params, template_name = 'order_arrived', project = orders_selected_row()$project, orderid = orders_selected_row()$id)
-    pm <- dbGetQuery(con(), paste0("SELECT wa_number FROM active_ts WHERE pm = 'true';"))$wa_number
+    pm <- tryCatch({
+      pm <- dbGetQuery(con(), paste0("SELECT wa_number FROM active_ts WHERE pm = 'true';"))$wa_number
+    }, 
+    error = function(e) {
+      con(dbConnect(RPostgres::Postgres(), user = "ucr5l5kv090pne", password = "p54f2fdf2a84201889d0c2eb6e634624192bea1f1a7a1abf423bcb5c7ad2a982c", host = "ec2-54-194-134-97.eu-west-1.compute.amazonaws.com", port = 5432, dbname = "d6hsqvpeb3dbtf"))
+      pm <- dbGetQuery(con(), paste0("SELECT wa_number FROM active_ts WHERE pm = 'true';"))$wa_number
+    })
     if (pm != wa_id) send_template(pm, body_params = body_params, template_name = 'order_arrived', project = orders_selected_row()$project, orderid = orders_selected_row()$id)
     
-    if (input$include_received) orders_data(dbGetQuery(con(), paste0("SELECT * FROM orders;")))
-    else orders_data(dbGetQuery(con(), paste0("SELECT * FROM orders WHERE status != 'Arrived';")))
+    if (input$include_received) {
+      tryCatch({
+        orders_data(dbGetQuery(con(), paste0("SELECT * FROM orders;")))
+      }, 
+      error = function(e) {
+        con(dbConnect(RPostgres::Postgres(), user = "ucr5l5kv090pne", password = "p54f2fdf2a84201889d0c2eb6e634624192bea1f1a7a1abf423bcb5c7ad2a982c", host = "ec2-54-194-134-97.eu-west-1.compute.amazonaws.com", port = 5432, dbname = "d6hsqvpeb3dbtf"))
+        orders_data(dbGetQuery(con(), paste0("SELECT * FROM orders;")))
+      })
+    }
+    else {
+      tryCatch({
+        orders_data(dbGetQuery(con(), paste0("SELECT * FROM orders WHERE status != 'Arrived';")))
+      }, 
+      error = function(e) {
+        con(dbConnect(RPostgres::Postgres(), user = "ucr5l5kv090pne", password = "p54f2fdf2a84201889d0c2eb6e634624192bea1f1a7a1abf423bcb5c7ad2a982c", host = "ec2-54-194-134-97.eu-west-1.compute.amazonaws.com", port = 5432, dbname = "d6hsqvpeb3dbtf"))
+        orders_data(dbGetQuery(con(), paste0("SELECT * FROM orders WHERE status != 'Arrived';")))
+      })
+    }
     removeModal()
   })
   
   observeEvent(input$update_order_to_ordered,{
-    if (input$set_as_ordered) dbExecute(con(), paste0("UPDATE orders SET status = 'Ordered', lastupdate = '",
-                                                      format(Sys.Date(), format = "%d-%m-%Y"), "', courier = '",
-                                                      input$order_courier, "', eta = '", format(input$order_eta[1], format = "%d-%m-%Y"),
-                                                      "' WHERE id = ", orders_selected_row()$id, ";"))
-    else dbExecute(con(), paste0("UPDATE orders SET lastupdate = '",
-                                 format(Sys.Date(), format = "%d-%m-%Y"), "', courier = '",
-                                 input$order_courier, "', eta = '", format(input$order_eta[1], format = "%d-%m-%Y"),
-                                 "' WHERE id = ", orders_selected_row()$id, ";"))
-    if (input$include_received) orders_data(dbGetQuery(con(), paste0("SELECT * FROM orders;")))
-    else orders_data(dbGetQuery(con(), paste0("SELECT * FROM orders WHERE status != 'Arrived';")))
+    if (input$set_as_ordered) {
+      tryCatch({
+        dbExecute(con(), paste0("UPDATE orders SET status = 'Ordered', lastupdate = '",
+                                format(Sys.Date(), format = "%d-%m-%Y"), "', courier = '",
+                                input$order_courier, "', eta = '", format(input$order_eta[1], format = "%d-%m-%Y"),
+                                "' WHERE id = ", orders_selected_row()$id, ";"))      }, 
+      error = function(e) {
+        con(dbConnect(RPostgres::Postgres(), user = "ucr5l5kv090pne", password = "p54f2fdf2a84201889d0c2eb6e634624192bea1f1a7a1abf423bcb5c7ad2a982c", host = "ec2-54-194-134-97.eu-west-1.compute.amazonaws.com", port = 5432, dbname = "d6hsqvpeb3dbtf"))
+        dbExecute(con(), paste0("UPDATE orders SET status = 'Ordered', lastupdate = '",
+                                format(Sys.Date(), format = "%d-%m-%Y"), "', courier = '",
+                                input$order_courier, "', eta = '", format(input$order_eta[1], format = "%d-%m-%Y"),
+                                "' WHERE id = ", orders_selected_row()$id, ";"))      })
+    }
+    else {
+      tryCatch({
+        dbExecute(con(), paste0("UPDATE orders SET lastupdate = '",
+                                format(Sys.Date(), format = "%d-%m-%Y"), "', courier = '",
+                                input$order_courier, "', eta = '", format(input$order_eta[1], format = "%d-%m-%Y"),
+                                "' WHERE id = ", orders_selected_row()$id, ";"))      }, 
+      error = function(e) {
+        con(dbConnect(RPostgres::Postgres(), user = "ucr5l5kv090pne", password = "p54f2fdf2a84201889d0c2eb6e634624192bea1f1a7a1abf423bcb5c7ad2a982c", host = "ec2-54-194-134-97.eu-west-1.compute.amazonaws.com", port = 5432, dbname = "d6hsqvpeb3dbtf"))
+        dbExecute(con(), paste0("UPDATE orders SET lastupdate = '",
+                                format(Sys.Date(), format = "%d-%m-%Y"), "', courier = '",
+                                input$order_courier, "', eta = '", format(input$order_eta[1], format = "%d-%m-%Y"),
+                                "' WHERE id = ", orders_selected_row()$id, ";"))      })
+    }
+    if (input$include_received) {
+      tryCatch({
+        orders_data(dbGetQuery(con(), paste0("SELECT * FROM orders;")))
+      }, 
+      error = function(e) {
+        con(dbConnect(RPostgres::Postgres(), user = "ucr5l5kv090pne", password = "p54f2fdf2a84201889d0c2eb6e634624192bea1f1a7a1abf423bcb5c7ad2a982c", host = "ec2-54-194-134-97.eu-west-1.compute.amazonaws.com", port = 5432, dbname = "d6hsqvpeb3dbtf"))
+        orders_data(dbGetQuery(con(), paste0("SELECT * FROM orders;")))
+      })
+    }
+    else {
+      tryCatch({
+        orders_data(dbGetQuery(con(), paste0("SELECT * FROM orders WHERE status != 'Arrived';")))
+      }, 
+      error = function(e) {
+        con(dbConnect(RPostgres::Postgres(), user = "ucr5l5kv090pne", password = "p54f2fdf2a84201889d0c2eb6e634624192bea1f1a7a1abf423bcb5c7ad2a982c", host = "ec2-54-194-134-97.eu-west-1.compute.amazonaws.com", port = 5432, dbname = "d6hsqvpeb3dbtf"))
+        orders_data(dbGetQuery(con(), paste0("SELECT * FROM orders WHERE status != 'Arrived';")))
+      })
+    }
     removeModal()
   })
   
   observeEvent(input$upload_files, {
     output$file_upload_error <- renderText({"Processing, please wait..."})
-    if (nrow(input$quote_file) == 0) output$file_upload_error <- renderText({"No files were selected."})
+    if (input$approve_without_quotes) {
+      ac <- tryCatch({
+        ac <- dbGetQuery(con(), paste0("SELECT wa_number FROM active_ts WHERE ac = 'true';"))$wa_number
+      }, 
+      error = function(e) {
+        con(dbConnect(RPostgres::Postgres(), user = "ucr5l5kv090pne", password = "p54f2fdf2a84201889d0c2eb6e634624192bea1f1a7a1abf423bcb5c7ad2a982c", host = "ec2-54-194-134-97.eu-west-1.compute.amazonaws.com", port = 5432, dbname = "d6hsqvpeb3dbtf"))
+        ac <- dbGetQuery(con(), paste0("SELECT wa_number FROM active_ts WHERE ac = 'true';"))$wa_number
+      })
+      body <- list(
+        list("type" = "text", "text" = orders_selected_row()$project),
+        list("type" = "text", "text" = orders_selected_row()$id),
+        list("type" = "text", "text" = orders_selected_row()$itemdescription),
+        list("type" = "text", "text" = as.character(input$order_amount))
+      )
+      #KARLA Test this
+      send_template(wa_id, body_params = body, template_name = 'request_payemt_without_quote', project = orders_selected_row()$project, orderid = orders_selected_row()$id)
+      tryCatch({
+        dbExecute(con(), paste0("UPDATE orders SET status = 'Payment Requested', lastupdate = '",format(Sys.Date(), format = "%d-%m-%Y"),"' WHERE id = ",orders_selected_row()$id,";" ))
+      }, 
+      error = function(e) {
+        con(dbConnect(RPostgres::Postgres(), user = "ucr5l5kv090pne", password = "p54f2fdf2a84201889d0c2eb6e634624192bea1f1a7a1abf423bcb5c7ad2a982c", host = "ec2-54-194-134-97.eu-west-1.compute.amazonaws.com", port = 5432, dbname = "d6hsqvpeb3dbtf"))
+        dbExecute(con(), paste0("UPDATE orders SET status = 'Payment Requested', lastupdate = '",format(Sys.Date(), format = "%d-%m-%Y"),"' WHERE id = ",orders_selected_row()$id,";" ))
+      })
+    }
     else {
-      path <- paste0("ProjectQuotes/",substr(orders_selected_row()$project, 1,4),"/")
-      try(path <- drive_mkdir(substr(orders_selected_row()$project, 1,4), path = "ProjectQuotes/", overwrite = FALSE))
-      for (i in 1:nrow(input$quote_file)) {
-        row <- input$quote_file[i, ]
-        drive_upload(row$datapath, 
-                     name = row$name, 
-                     type = row$type, 
-                     path = path)
-        if (input$get_quote_approval) {
+      if (nrow(input$quote_file) == 0) output$file_upload_error <- renderText({"No files were selected."})
+      else {
+        path <- paste0("ProjectQuotes/",substr(orders_selected_row()$project, 1,4),"/")
+        try(path <- drive_mkdir(substr(orders_selected_row()$project, 1,4), path = "ProjectQuotes/", overwrite = FALSE))
+        for (i in 1:nrow(input$quote_file)) {
+          row <- input$quote_file[i, ]
+          drive_upload(row$datapath, 
+                       name = row$name, 
+                       type = row$type, 
+                       path = path)
           body = list(
             'messaging_product' = 'whatsapp',
             'file' = upload_file(row$datapath),
@@ -292,23 +570,68 @@ server <- function(input, output, session) {
             list('type' = 'text', 'text' = as.character(orders_selected_row()$id)),
             list('type' = 'text', 'text' = orders_selected_row()$itemdescription)
           )
-          md <- dbGetQuery(con(), paste0("SELECT wa_number FROM active_ts WHERE md = 'true';"))$wa_number
+          md <- tryCatch({
+            md <- dbGetQuery(con(), paste0("SELECT wa_number FROM active_ts WHERE md = 'true';"))$wa_number
+          }, 
+          error = function(e) {
+            con(dbConnect(RPostgres::Postgres(), user = "ucr5l5kv090pne", password = "p54f2fdf2a84201889d0c2eb6e634624192bea1f1a7a1abf423bcb5c7ad2a982c", host = "ec2-54-194-134-97.eu-west-1.compute.amazonaws.com", port = 5432, dbname = "d6hsqvpeb3dbtf"))
+            md <- dbGetQuery(con(), paste0("SELECT wa_number FROM active_ts WHERE md = 'true';"))$wa_number
+          })
           message <- send_template(md, body_params, "quote_approval", header, project=orders_selected_row()$project, orderid = orders_selected_row()$id, docid = docID)
           if (!message) output$file_upload_error <- renderText({"Unable to send the quotes for approval."})
         }
+        tryCatch({
+          dbExecute(con(), paste0("UPDATE orders SET status = 'Quotes Uploaded', lastupdate = '",format(Sys.Date(), format = "%d-%m-%Y"),"' WHERE id = ",orders_selected_row()$id,";" ))
+        }, 
+        error = function(e) {
+          con(dbConnect(RPostgres::Postgres(), user = "ucr5l5kv090pne", password = "p54f2fdf2a84201889d0c2eb6e634624192bea1f1a7a1abf423bcb5c7ad2a982c", host = "ec2-54-194-134-97.eu-west-1.compute.amazonaws.com", port = 5432, dbname = "d6hsqvpeb3dbtf"))
+          dbExecute(con(), paste0("UPDATE orders SET status = 'Quotes Uploaded', lastupdate = '",format(Sys.Date(), format = "%d-%m-%Y"),"' WHERE id = ",orders_selected_row()$id,";" ))
+        })
+        
+        folder <- drive_find(pattern = substr(orders_selected_row()$project, 1,4), type = "folder")
+        tryCatch({
+          dbExecute(con(), paste0("UPDATE orders SET quotes = '",folder$drive_resource[[1]]$webViewLink, "' WHERE id = ",orders_selected_row()$id,";" ))
+        }, 
+        error = function(e) {
+          con(dbConnect(RPostgres::Postgres(), user = "ucr5l5kv090pne", password = "p54f2fdf2a84201889d0c2eb6e634624192bea1f1a7a1abf423bcb5c7ad2a982c", host = "ec2-54-194-134-97.eu-west-1.compute.amazonaws.com", port = 5432, dbname = "d6hsqvpeb3dbtf"))
+          dbExecute(con(), paste0("UPDATE orders SET quotes = '",folder$drive_resource[[1]]$webViewLink, "' WHERE id = ",orders_selected_row()$id,";" ))
+        })
       }
-      if (input$get_quote_approval) dbExecute(con(), paste0("UPDATE orders SET status = 'Quotes Uploaded' WHERE id = ",orders_selected_row()$id,";" ))
-      
-      folder <- drive_find(pattern = substr(orders_selected_row()$project, 1,4), type = "folder")
-      dbExecute(con(), paste0("UPDATE orders SET quotes = '",folder$drive_resource[[1]]$webViewLink, "' WHERE id = ",orders_selected_row()$id,";" ))
-      if (input$include_received) orders_data(dbGetQuery(con(), paste0("SELECT * FROM orders;")))
-      else orders_data(dbGetQuery(con(), paste0("SELECT * FROM orders WHERE status != 'Arrived';")))
-      removeModal()
     }
+    if (input$include_received) {
+      tryCatch({
+        orders_data(dbGetQuery(con(), paste0("SELECT * FROM orders;")))
+      }, 
+      error = function(e) {
+        con(dbConnect(RPostgres::Postgres(), user = "ucr5l5kv090pne", password = "p54f2fdf2a84201889d0c2eb6e634624192bea1f1a7a1abf423bcb5c7ad2a982c", host = "ec2-54-194-134-97.eu-west-1.compute.amazonaws.com", port = 5432, dbname = "d6hsqvpeb3dbtf"))
+        orders_data(dbGetQuery(con(), paste0("SELECT * FROM orders;")))
+      })
+    }
+    else {
+      tryCatch({
+        orders_data(dbGetQuery(con(), paste0("SELECT * FROM orders WHERE status != 'Arrived';")))
+      }, 
+      error = function(e) {
+        con(dbConnect(RPostgres::Postgres(), user = "ucr5l5kv090pne", password = "p54f2fdf2a84201889d0c2eb6e634624192bea1f1a7a1abf423bcb5c7ad2a982c", host = "ec2-54-194-134-97.eu-west-1.compute.amazonaws.com", port = 5432, dbname = "d6hsqvpeb3dbtf"))
+        orders_data(dbGetQuery(con(), paste0("SELECT * FROM orders WHERE status != 'Arrived';")))
+      })
+    }
+        removeModal()
   })
   
   observeEvent(input$addOrder, {
-    active_employees <- dbGetQuery(con(), "SELECT name FROM active_ts")$name
+    active_employees <- tryCatch({
+      active_employees <- dbGetQuery(con(), "SELECT name FROM active_ts")$name
+    }, 
+    error = function(e) {
+      con(dbConnect(RPostgres::Postgres(), user = "ucr5l5kv090pne", password = "p54f2fdf2a84201889d0c2eb6e634624192bea1f1a7a1abf423bcb5c7ad2a982c", host = "ec2-54-194-134-97.eu-west-1.compute.amazonaws.com", port = 5432, dbname = "d6hsqvpeb3dbtf"))
+      active_employees <- dbGetQuery(con(), "SELECT name FROM active_ts")$name
+    })
+    proj_choices <- tryCatch({
+      proj_choices <- dbGetQuery(con(), "SELECT projectname FROM projects WHERE status IN ('Not Started', 'In Progress');")$projectname    }, 
+    error = function(e) {
+      con(dbConnect(RPostgres::Postgres(), user = "ucr5l5kv090pne", password = "p54f2fdf2a84201889d0c2eb6e634624192bea1f1a7a1abf423bcb5c7ad2a982c", host = "ec2-54-194-134-97.eu-west-1.compute.amazonaws.com", port = 5432, dbname = "d6hsqvpeb3dbtf"))
+      proj_choices <- dbGetQuery(con(), "SELECT projectname FROM projects WHERE status IN ('Not Started', 'In Progress');")$projectname    })
     modalDialog(
       title = "Submit New Order",
       div(
@@ -333,7 +656,7 @@ server <- function(input, output, session) {
         selectInput(
           inputId = "new_order_proj",
           label = "Project:",
-          choices = dbGetQuery(con(), "SELECT projectname FROM projects WHERE status IN ('Not Started', 'In Progress');")$projectname,
+          choices = proj_choices,
           width = "270px"
         )
       ),
@@ -359,13 +682,32 @@ server <- function(input, output, session) {
   })
   
   observeEvent(input$add_order, {
+    from <- tryCatch({
+      from <- dbGetQuery(con(), paste0("SELECT wa_number FROM active_ts WHERE name = '",input$new_order_empl,"';"))$wa_number    }, 
+    error = function(e) {
+      con(dbConnect(RPostgres::Postgres(), user = "ucr5l5kv090pne", password = "p54f2fdf2a84201889d0c2eb6e634624192bea1f1a7a1abf423bcb5c7ad2a982c", host = "ec2-54-194-134-97.eu-west-1.compute.amazonaws.com", port = 5432, dbname = "d6hsqvpeb3dbtf"))
+      from <- dbGetQuery(con(), paste0("SELECT wa_number FROM active_ts WHERE name = '",input$new_order_empl,"';"))$wa_number    })
     df <- data.frame(
       "text" = paste0("O", substr(input$new_order_proj, 1,4), " ", input$new_order_description),
-      "from" = dbGetQuery(con(), paste0("SELECT wa_number FROM active_ts WHERE name = '",input$new_order_empl,"';"))$wa_number
+      "from" = from
     )
     create_order(df)
-    if (input$include_received) orders_data(dbGetQuery(con(), paste0("SELECT * FROM orders;")))
-    else orders_data(dbGetQuery(con(), paste0("SELECT * FROM orders WHERE status != 'Arrived';")))
+    if (input$include_received) {
+      tryCatch({
+        orders_data(dbGetQuery(con(), paste0("SELECT * FROM orders;")))
+      }, 
+      error = function(e) {
+        con(dbConnect(RPostgres::Postgres(), user = "ucr5l5kv090pne", password = "p54f2fdf2a84201889d0c2eb6e634624192bea1f1a7a1abf423bcb5c7ad2a982c", host = "ec2-54-194-134-97.eu-west-1.compute.amazonaws.com", port = 5432, dbname = "d6hsqvpeb3dbtf"))
+        orders_data(dbGetQuery(con(), paste0("SELECT * FROM orders;")))
+      })
+    }
+    else{
+      tryCatch({
+        orders_data(dbGetQuery(con(), paste0("SELECT * FROM orders WHERE status != 'Arrived';")))      }, 
+      error = function(e) {
+        con(dbConnect(RPostgres::Postgres(), user = "ucr5l5kv090pne", password = "p54f2fdf2a84201889d0c2eb6e634624192bea1f1a7a1abf423bcb5c7ad2a982c", host = "ec2-54-194-134-97.eu-west-1.compute.amazonaws.com", port = 5432, dbname = "d6hsqvpeb3dbtf"))
+        orders_data(dbGetQuery(con(), paste0("SELECT * FROM orders WHERE status != 'Arrived';")))      })
+    } 
     removeModal()
   })
   
@@ -373,464 +715,24 @@ server <- function(input, output, session) {
     removeModal()
   })
   
-  # Clock page ----
-  observeEvent(input$sidebartabs,{
-    if (input$sidebartabs == "clock") {
-      active_box <- reactiveVal("employees")
-      hide("projects")
-      hide("tasks_div")
-      shinyjs::show("employees")
-      
-      customers <- reactiveVal(data.frame())
-      new_df <-  isolate(sheet())
-      timesheet <-  NULL
-      current_proj_tasks <- reactiveVal()
-      
-      output$dt_employees <- renderDT({
-        sheet(dbGetQuery(con(), "SELECT * FROM active_ts"))
-        dt_employees <- datatable(
-          sheet() %>% select(name, customer, project, task, timein),
-          selection = "single",
-          options = list(
-            scrollX = TRUE,
-            dom = "t",
-            paging = FALSE,
-            searching = FALSE
-          ),
-          rownames = FALSE,
-          colnames = c('Name', 'Customer', 'Project', 'Task', 'Time In')
-        ) %>%
-          formatStyle(column = 'name', lineHeight='250%')
-        
-      }) # renderDT
-      
-      # Employee clicked
-      observeEvent(input$dt_employees_rows_selected, {
-        employee_index <<- input$dt_employees_rows_selected
-        rowClicked <- isolate(sheet()[employee_index, ])
-        timesheet["TimeTrackingUserId"] <<- rowClicked$userid
-        timesheet["User"] <<- rowClicked$name
-        timesheet["Comments"] <<- rowClicked$timein
-        timesheet["TimeTrackingProjectId"] <<- rowClicked$projectid
-        timesheet["TimeTrackingCustomerId"] <<- rowClicked$customerid
-        timesheet["TimeTrackingTaskId"] <<- rowClicked$taskid
-        shinyjs::hide("employees")
-        
-        output$dt_projects <- renderDT({
-          active_proj <- dbGetQuery(con(), "SELECT projectid FROM projects WHERE status IN ('Not Started', 'In Progress')")$projectid
-          projects(projects() %>% filter(ID %in% active_proj))
-          # Create Project Table
-          datatable(select(projects(),Name, Customer), 
-                    selection = 'single',
-                    options = list(order = list(list(0, 'desc'))),
-                    rownames = FALSE) %>%
-            formatStyle(column = 'Name', lineHeight='400%')
-        })
-        shinyjs::show("projects")
-        active_box("projects")
-      })
-      
-      observeEvent(input$backBtnTasks,{
-        shinyjs::hide("tasks_div")
-        shinyjs::show("projects")
-        active_box("projects")
-      })
-      
-      observeEvent(input$backBtn,{
-        shinyjs::hide("projects")
-        shinyjs::show("employees")
-        active_box("employees")
-      })
-      
-      observeEvent(input$refreshClockProjects, {
-        projects(get_projects(get_from_api("TimeTrackingProject/GetActiveProjects")))
-        proj_sheet <- dbGetQuery(con(), "SELECT * FROM projects")
-        missing_rows <- projects()[!(projects()$ID %in% proj_sheet$projectid), ]
-        
-        if (nrow(missing_rows)>0) {
-            md <- dbGetQuery(con(), paste0("SELECT wa_number FROM active_ts WHERE md = 'true';"))$wa_number
-          for (i in 1:nrow(missing_rows)) {
-            body <- list(
-              list("type" = "text", "text" = missing_rows$Name)
-            )
-            send_template(md, body, template_name = 'md_new_project', project = missing_rows$Name)
-          }
-          add <- data.frame(
-            "projectid" = as.numeric(missing_rows$ID),
-            "projectname" = missing_rows$Name,
-            "customer" = missing_rows$Customer,
-            "status" = "Not Started",
-            "added" = substr(missing_rows$StartDate, 0,10), 
-            "lastupdate" = substr(missing_rows$StartDate, 0,10),
-            "invoiceno" = NA,
-            "images" = NA,
-            "notes" = NA
-          )
-          dbWriteTable(con(), "projects", add, append = TRUE, overwrite = FALSE)
-        }
-        
-      })
-      
-      # Show new project modal
-      observeEvent(input$addProject, {
-        df <- get_customers()
-        colnames(df) <- c("CustomerID", "Customer")
-        isolate({
-          customers(df)
-          modalDialog(
-            title = "Add New Project",
-            div(
-              style = "display:inline-block",
-              textInput(
-                inputId = "proj_name",
-                label = "Project Name:",
-                value = get_next_project(projects()),
-                width = "270px"
-              )
-            ),
-            div(
-              style = "display:inline-block",
-              selectInput(
-                inputId = "proj_cust",
-                label = "Customer:",
-                choices = c("[New Customer]", customers()$Customer),
-                selected = customers()$Customer[1],
-                width = "270px"
-              )
-            ),
-            div(
-              id = "new_customer_div",
-              style = "display:inline-block",
-              textInput(
-                inputId = "new_customer",
-                label = "New Customer Name:",
-                value = "",
-                width = "270px"
-              )
-            ),
-            size = "s",
-            easyClose = FALSE,
-            footer = div(
-              class = "pull-right container",
-              fluidRow(textOutput("add_proj_error")),
-              actionButton(
-                inputId = "dismiss_modal",
-                label = "Close",
-                icon = icon("xmark"),
-                class = "add_proj"
-              ),
-              actionButton(
-                inputId = "confirm_add",
-                label = "Add Project",
-                icon = icon("plus"),
-                class = "back"
-              )
-            )
-          ) %>% showModal()  
-          shinyjs::hide("new_customer_div")
-        })
-      })
-      
-      observeEvent(input$dismiss_modal, {
-        shinyjs::show("projects")
-        removeModal()
-      })
-      
-      # New customer
-      observeEvent(input$proj_cust, {
-        if (input$proj_cust == "[New Customer]") {
-          shinyjs::show("new_customer_div")
-        }
-      })
-      
-      # Confirm add project clicked
-      observeEvent(input$confirm_add, {
-        success <- FALSE
-        if (input$new_customer != "") {
-          s <- post_to_api1("Customer", list("Name" = input$new_customer,
-                                             "Active" = 'true'))
-          if (is.list(s)) {
-            selectedCustomerID <- s$ID
-            success <- TRUE
-          } else {
-            output$add_proj_error <- renderText({s})
-          }
-        } else {
-          success <- TRUE
-          selectedCustomerID <- customers() %>%
-            filter(Customer == input$proj_cust) %>%
-            select(CustomerID) %>%
-            pull()
-        }
-        if (success) {
-          p <- post_to_api1("TimeTrackingProject", list("TimeTrackingProject" = 
-                                                          list("Name" = input$proj_name, 
-                                                               "CustomerID" = selectedCustomerID,
-                                                               "BillingMethodID" = 3,
-                                                               "InvoicingMethodID" = 3,
-                                                               "StartDate" = format(with_tz(now(tzone = "GMT"), tzone = "Africa/Johannesburg"),"%Y-%m-%d"),
-                                                               "ProjectTasks" = list(list("TaskID" = default_task)), # ProjectTasks as a list of lists
-                                                               "BudgetBasedOn" = 1,
-                                                               "Active" = "true")))
-          if (is.list(p)) {
-            removeModal()
-            showNotification("Project successfully added")
-            projects(get_projects(get_from_api("TimeTrackingProject/GetActiveProjects")))
-          } else {
-            output$add_proj_error <- renderText({p})
-          }
-        }
-      })
-      
-      # Clicked on project
-      observeEvent(input$dt_projects_rows_selected, {
-        if (!is.null(projects())) {
-          row <- input$dt_projects_rows_selected
-          rowClicked <- projects()[row, ]
-          new_df <<- sheet()
-          new_df$project[employee_index] <<- rowClicked$Name
-          new_df$projectid[employee_index] <<- rowClicked$ID
-          new_df$customer[employee_index] <<- rowClicked$Customer
-          new_df$customerid[employee_index] <<- rowClicked$CustomerID
-          new_df$taskid[employee_index] <<- default_task
-          new_df$task[employee_index] <<- "Default"
-          
-          output$dt_tasks <- renderDT({
-            d <- data.frame(
-              taskid = 0,
-              projectname = rowClicked$Name,
-              taskname = "Other",
-              description = "Other",
-              status = "In Progress",
-              employee = timesheet["User"],
-              plannedstart = NA,
-              plannedcompletion = NA,
-              colour = NA
-            )
-            tasks(bind_rows(d,dbGetQuery(con(), paste0("SELECT * FROM tasks WHERE employee = '", timesheet["User"], "';"))))
-            current_proj_tasks(tasks() %>% filter(projectname == rowClicked$Name))
-            # Create Task Table
-            datatable(current_proj_tasks() %>% select(c("taskname", "description")), 
-                      selection = 'single',
-                      rownames = FALSE,
-                      colnames = c("Task Name", "Description")) %>%
-              formatStyle(column = 'taskname', lineHeight='200%')
-          })
-          shinyjs::hide("projects")
-          shinyjs::show("tasks_div")
-          active_box("tasks_div")
-        }
-      })
-      
-      # Clicked on task
-      observeEvent(input$dt_tasks_rows_selected, {
-        row <- input$dt_tasks_rows_selected
-        rowClicked <- current_proj_tasks()[row, ]
-        new_df$taskid[employee_index] <<- task_ids[rowClicked$taskname]
-        new_df$task[employee_index] <<- rowClicked$taskname
-        if (rowClicked$taskname == "Other") {
-          showModal(modalDialog(
-            title="Clock In",
-            paste0(
-              timesheet["User"],
-              ", you are about to clock on ",
-              new_df$project[employee_index],
-              ": ",
-              new_df$task[employee_index],
-              "."
-            ),
-            textInput("user_comment", "Please provide a description:"),
-            footer = tagList(
-              actionButton(
-                inputId = "dismiss_modal",
-                label = "Cancel",
-                icon = icon("xmark"),
-                class = "add_proj"
-              ),
-              actionButton("confirmClock", "Confirm")
-            )
-          ))
-        } else {
-          showModal(modalDialog(
-            title="Clock In",
-            paste0(
-              timesheet["User"],
-              ", are you sure you want to clock on ",
-              new_df$project[employee_index],
-              "?"
-            ),
-            footer = tagList(
-              actionButton(
-                inputId = "dismiss_clockin_modal",
-                label = "Cancel",
-                icon = icon("xmark"),
-                class = "add_proj"
-              ),
-              actionButton("confirmClock", "Confirm")
-            )
-          ))
-        }
-        
-        shinyjs::hide("tasks_div")
-        shinyjs::hide("projects")
-        shinyjs::show("employees")
-        
-      })
-      
-      observeEvent(input$dismiss_clockin_modal, {
-        shinyjs::hide("employees")
-        shinyjs::show("tasks_div")
-        shinyjs::hide("projects")
-      })
-      
-      # Confirm clock in clicked
-      observeEvent(input$confirmClock, {
-        empl_ts <-  dbGetQuery(con(), paste0("SELECT * FROM active_ts WHERE name = '", 
-                                             timesheet["User"], "';"))
-        empl_row <- new_df[employee_index,]
-        if (!is.na(empl_ts$project)) {
-          time_in_datetime <- as.POSIXlt(paste(Sys.Date(), empl_ts$timein)) - dhours(2)
-          timesheet["Date"] <- format(with_tz(now(tzone = "GMT"), tzone = "Africa/Johannesburg"),"%Y-%m-%d")
-          timesheet["Hours"] <- as.numeric(as.duration(now(tzone = "Africa/Johannesburg") - time_in_datetime), "hours")
-          timesheet["Comments"] <- paste(timesheet["Comments"], "-", format(with_tz(now(tzone = "GMT"), tzone = "Africa/Johannesburg"), format = "%H:%M"), ifelse(is.na(empl_ts$comment), "", empl_ts$comment))
-          post_to_api("TimeTrackingTimesheet",timesheet)
-        }
-        comment <- ifelse(is.null(input$user_comment),"", input$user_comment) 
-        timein <- format(with_tz(now(tzone = "GMT"), tzone = "Africa/Johannesburg"), format = "%H:%M")
-        dbExecute(con(), paste0("UPDATE active_ts SET project = '",empl_row$project,"', projectid = ",
-                                empl_row$projectid,", task = '",empl_row$task,"', taskid = ",empl_row$taskid,
-                                ", customer = '",empl_row$customer,"', customerid = ",empl_row$customerid,
-                                ", timein = '", timein,"', comment = '",comment,"' WHERE name = '",timesheet["User"],"';"))
-        
-        showNotification("Timesheet successfully updated.")
-        print(paste("IN:", empl_row$name, empl_row$project, empl_row$timein))
-        sheet(dbGetQuery(con(), paste0("SELECT * FROM active_ts")))
-        removeModal()
-        shinyjs::hide("projects")
-        shinyjs::show("employees")
-        active_box("employees")
-        taskRow <- current_proj_tasks()[input$dt_tasks_rows_selected, ]
-        status <- dbGetQuery(con(), paste0("SELECT status FROM tasks WHERE taskid = ", input$dt_tasks_rows_selected))$status
-        if (length(status)>0 && status == "Not Started" && taskRow$taskid != 0) {
-          body <- list(
-            list("type" = "text", "text" = empl_row$name), 
-            list("type" = "text", "text" = paste0(taskRow$taskname, ": ", taskRow$description)), 
-            list("type" = "text", "text" = format(as.POSIXct(taskRow$plannedcompletion), format = "%H:%M %d %B"))
-          )
-          send_template(get_wa_id(empl_row$name), body, template_name = 'task_time', heading = as.list(c("type" = "text", "text" = taskRow$projectname)), taskid = taskRow$taskid) 
-          if (dbGetQuery(con(), paste0("SELECT status FROM projects WHERE projectid = ",empl_row$projectid,";"))$status == "Not Started") {
-            md <- dbGetQuery(con(), paste0("SELECT wa_number FROM active_ts WHERE md = 'true';"))$wa_number
-            body <- list(
-              list("type" = "text", "text" = empl_row$project)
-            )
-            send_template(md, body, template_name = 'md_project_started', project = empl_row$project)
-          }
-          dbExecute(con(), paste0("UPDATE tasks SET status = 'In Progress' WHERE taskid = ",empl_row$taskid,";"))
-          dbExecute(con(), paste0("UPDATE projects SET status = 'In Progress' WHERE projectid = ",empl_row$projectid,";"))
-        }
-      })
-      
-      # Confirm Breakfast is clicked
-      observeEvent(input$confirmBreakfast, {
-        empl_ts <-  dbGetQuery(con(), paste0("SELECT * FROM active_ts WHERE name = '", 
-                                             timesheet["User"], "';"))
-        if (!is.na(empl_ts$project)) {
-          time_in_datetime <- as.POSIXlt(paste(Sys.Date(), empl_ts$timein)) - dhours(2)
-          timesheet["Date"] <- format(with_tz(now(tzone = "GMT"), tzone = "Africa/Johannesburg"),"%Y-%m-%d")
-          timesheet["Hours"] <- as.numeric(as.duration(now(tzone = "Africa/Johannesburg") - time_in_datetime), "hours")
-          timesheet["Comments"] <- paste(timesheet["Comments"], "-", format(with_tz(now(tzone = "GMT"), tzone = "Africa/Johannesburg"), format = "%H:%M"), ifelse(is.na(empl_ts$comment), "", empl_ts$comment))
-          post_to_api("TimeTrackingTimesheet",timesheet)
-          
-        }
-        comment <- ifelse(is.null(input$user_comment),"", input$user_comment) 
-        timein <- format(with_tz(now(tzone = "GMT"), tzone = "Africa/Johannesburg"), format = "%H:%M")
-        dbExecute(con(), paste0("UPDATE active_ts SET project = '0000 - Svenco Engineering', projectid = 290320, 
-            task = 'Breakfast Break', taskid = ",breakfast_task,", customer = 'Svenco Engineering', customerid = 31662927, timein = '", timein,"', 
-            comment = '",comment,"' WHERE name = '",timesheet["User"],"';"))
-        showNotification("Timesheet successfully updated.")
-        sheet(dbGetQuery(con(), paste0("SELECT * FROM active_ts")))
-        removeModal()
-        shinyjs::hide("projects")
-        shinyjs::show("employees")
-        active_box("employees")
-      })
-      
-      
-      # Clock Out ----
-      
-      # Open clock out modal
-      observeEvent(list(input$clockOutBtn,input$lunchBtn), {
-        req(input$clockOutBtn | input$lunchBtn)
-        showModal(modalDialog(
-          title="Clock Out",
-          paste0(
-            timesheet["User"],
-            ", are you sure you want to clock out?"
-          ),
-          footer = tagList(actionButton(
-            inputId = "dismiss_modal",
-            label = "Cancel",
-            icon = icon("xmark"),
-            class = "add_proj"
-          ),
-          actionButton("confirmClockOut", "Confirm")
-          )
-        ))
-      })
-      
-      # Open break modal
-      observeEvent(input$breakBtn, {
-        showModal(modalDialog(
-          title="Breakfast Break",
-          paste0(
-            timesheet["User"],
-            ", are you sure you want to take your breakfast break?"
-          ),
-          footer = tagList(actionButton(
-            inputId = "dismiss_modal",
-            label = "Cancel",
-            icon = icon("xmark"),
-            class = "add_proj"
-          ),
-          actionButton("confirmBreakfast", "Confirm")
-          )
-        ))
-      })
-      
-      # Clockout button clicked
-      observeEvent(input$confirmClockOut, {
-        empl_ts <-  dbGetQuery(con(), paste0("SELECT * FROM active_ts WHERE name = '", 
-                                             timesheet["User"], "';"))
-        if (!is.na(empl_ts$project)) {
-          time_in_datetime <- as.POSIXlt(paste(Sys.Date(), empl_ts$timein)) - dhours(2)
-          timesheet["Date"] <- format(with_tz(now(tzone = "GMT"), tzone = "Africa/Johannesburg"),"%Y-%m-%d")
-          timesheet["Hours"] <- as.numeric(as.duration(now(tzone = "Africa/Johannesburg") - time_in_datetime), "hours")
-          timesheet["Comments"] <- paste(timesheet["Comments"], "-", format(with_tz(now(tzone = "GMT"), tzone = "Africa/Johannesburg"), format = "%H:%M"), ifelse(is.na(empl_ts$comment), "", empl_ts$comment))
-          post_to_api("TimeTrackingTimesheet",timesheet)
-          dbExecute(con(), paste0("UPDATE active_ts SET project = NULL, projectid = NULL, 
-            task = NULL, taskid = NULL, customer = NULL, customerid = NULL, timein = NULL, 
-            comment = NULL WHERE name = '",timesheet["User"],"';"))
-        }
-        
-        showNotification("Timesheet successfully updated.")
-        print(paste("OUT:", new_df$Name[employee_index], new_df$Project[employee_index], timesheet["Comments"]))
-        sheet(dbGetQuery(con(), paste0("SELECT * FROM active_ts")))
-        removeModal()
-        shinyjs::hide("projects")
-        shinyjs::show("employees")
-        active_box("employees")
-      })
-    }
-  }) # Observe - clock page
   
   # Project Management -----
   observeEvent(input$sidebartabs,{
     
     if (input$sidebartabs == "project_planner") {
-      tasks_sheet(dbGetQuery(con(), "SELECT * FROM tasks"))
+      tryCatch({
+        tasks_sheet(dbGetQuery(con(), "SELECT * FROM tasks"))
+      }, 
+      error = function(e) {
+        con(dbConnect(RPostgres::Postgres(), user = "ucr5l5kv090pne", password = "p54f2fdf2a84201889d0c2eb6e634624192bea1f1a7a1abf423bcb5c7ad2a982c", host = "ec2-54-194-134-97.eu-west-1.compute.amazonaws.com", port = 5432, dbname = "d6hsqvpeb3dbtf"))
+        tasks_sheet(dbGetQuery(con(), "SELECT * FROM tasks"))
+      })
       proj_timevis_data <- reactiveVal(data.frame())
       tasks <- reactiveVal(get_tasks(get_from_api("TimeTrackingTask","Get","$filter=Active eq true&includeProjectTasks=True&")))
-      updateSelectizeInput(session, "proj_plan", label = NULL, choices=c("Select Project", sort(projects()$Name, decreasing = TRUE)))
+      
+      choices_display <- paste0(projects()$Name, " (", projects()$Customer, ")")
+      named_vector <- setNames(projects()$Name, choices_display)
+      updateSelectizeInput(session, "proj_plan", label = NULL, choices = c("Select Project", named_vector))
       
       observe({
         if (nrow(tasks_sheet() > 0) && !is.null(input$proj_plan)) {
@@ -848,7 +750,13 @@ server <- function(input, output, session) {
       })
       
       observeEvent(input$addTask, {
-        enabled_users <- dbGetQuery(con(), "SELECT name FROM active_ts")$name
+        enabled_users <- tryCatch({
+          enabled_users <- dbGetQuery(con(), "SELECT name FROM active_ts")$name
+        }, 
+        error = function(e) {
+          con(dbConnect(RPostgres::Postgres(), user = "ucr5l5kv090pne", password = "p54f2fdf2a84201889d0c2eb6e634624192bea1f1a7a1abf423bcb5c7ad2a982c", host = "ec2-54-194-134-97.eu-west-1.compute.amazonaws.com", port = 5432, dbname = "d6hsqvpeb3dbtf"))
+          enabled_users <- dbGetQuery(con(), "SELECT name FROM active_ts")$name
+        })
         proj_id <- (projects() %>% filter(Name == input$proj_plan))$ID
         tasks <- filter(tasks(), grepl(paste0("\\b", proj_id, "\\b"), ProjectID))$Name
         shiny::modalDialog(
@@ -974,20 +882,45 @@ server <- function(input, output, session) {
           plannedcompletion = paste(format(input$task_dates[2], format = "%Y-%m-%d"), format(input$task_end_time, format = "%H:%M:%S")),
           colour = task_colors[input$task_name]
         )
-        
-        dbExecute(con(), paste0("INSERT INTO tasks (taskid, projectname, taskname, description, status, employee, 
-                              plannedstart, plannedcompletion, colour) VALUES (", new_item$taskid, ",'",new_item$projectname,
-                                "','", new_item$taskname, "', '", new_item$description,"', '", new_item$status, "', '", 
-                                new_item$employee,  "', '", new_item$plannedstart, "', '", 
-                                new_item$plannedcompletion, "', '", new_item$colour, "');"))
-        tasks_sheet(dbGetQuery(con(), "SELECT * FROM tasks"))
+        tryCatch({
+          dbExecute(con(), paste0("INSERT INTO tasks ( projectname, taskname, description, status, employee, plannedstart, plannedcompletion, colour) VALUES ('",new_item$projectname,
+                                  "','", new_item$taskname, "', '", new_item$description,"', '", new_item$status, "', '", 
+                                  new_item$employee,  "', '", new_item$plannedstart, "', '", 
+                                  new_item$plannedcompletion, "', '", new_item$colour, "');"))
+        }, 
+        error = function(e) {
+          con(dbConnect(RPostgres::Postgres(), user = "ucr5l5kv090pne", password = "p54f2fdf2a84201889d0c2eb6e634624192bea1f1a7a1abf423bcb5c7ad2a982c", host = "ec2-54-194-134-97.eu-west-1.compute.amazonaws.com", port = 5432, dbname = "d6hsqvpeb3dbtf"))
+          dbExecute(con(), paste0("INSERT INTO tasks ( projectname, taskname, description, status, employee, plannedstart, plannedcompletion, colour) VALUES ('",new_item$projectname,
+                                  "','", new_item$taskname, "', '", new_item$description,"', '", new_item$status, "', '", 
+                                  new_item$employee,  "', '", new_item$plannedstart, "', '", 
+                                  new_item$plannedcompletion, "', '", new_item$colour, "');"))
+        })
+        tryCatch({
+          tasks_sheet(dbGetQuery(con(), "SELECT * FROM tasks"))
+        }, 
+        error = function(e) {
+          con(dbConnect(RPostgres::Postgres(), user = "ucr5l5kv090pne", password = "p54f2fdf2a84201889d0c2eb6e634624192bea1f1a7a1abf423bcb5c7ad2a982c", host = "ec2-54-194-134-97.eu-west-1.compute.amazonaws.com", port = 5432, dbname = "d6hsqvpeb3dbtf"))
+          tasks_sheet(dbGetQuery(con(), "SELECT * FROM tasks"))
+        })
         proj_timevis_data(updateProjTimevis(tasks_sheet() %>% filter(projectname == input$proj_plan)))
         shiny::removeModal()
       })
       
       observeEvent(input$projectTimeVis_selected, {
-        selected_task <- dbGetQuery(isolate(con()), paste0("SELECT * FROM tasks WHERE taskid = ", input$projectTimeVis_selected, ";"))
-        enabled_users <- dbGetQuery(isolate(con()), paste0("SELECT name FROM active_ts;"))$name
+        selected_task <- tryCatch({
+          selected_task <- dbGetQuery(isolate(con()), paste0("SELECT * FROM tasks WHERE taskid = ", input$projectTimeVis_selected, ";"))
+        }, 
+        error = function(e) {
+          con(dbConnect(RPostgres::Postgres(), user = "ucr5l5kv090pne", password = "p54f2fdf2a84201889d0c2eb6e634624192bea1f1a7a1abf423bcb5c7ad2a982c", host = "ec2-54-194-134-97.eu-west-1.compute.amazonaws.com", port = 5432, dbname = "d6hsqvpeb3dbtf"))
+          selected_task <- dbGetQuery(isolate(con()), paste0("SELECT * FROM tasks WHERE taskid = ", input$projectTimeVis_selected, ";"))
+        })
+        enabled_users <- tryCatch({
+          enabled_users <- dbGetQuery(isolate(con()), paste0("SELECT name FROM active_ts;"))$name
+        }, 
+        error = function(e) {
+          con(dbConnect(RPostgres::Postgres(), user = "ucr5l5kv090pne", password = "p54f2fdf2a84201889d0c2eb6e634624192bea1f1a7a1abf423bcb5c7ad2a982c", host = "ec2-54-194-134-97.eu-west-1.compute.amazonaws.com", port = 5432, dbname = "d6hsqvpeb3dbtf"))
+          enabled_users <- dbGetQuery(isolate(con()), paste0("SELECT name FROM active_ts;"))$name
+        })
         proj_id <- (isolate(projects()) %>% filter(Name == input$proj_plan))$ID
         tasks <- filter(isolate(tasks()), grepl(paste0("\\b", proj_id, "\\b"), ProjectID))$Name
         shiny::modalDialog(
@@ -1116,12 +1049,30 @@ server <- function(input, output, session) {
       })
       
       observeEvent(input$editTaskProj, {
-        dbExecute(con(), paste0("UPDATE tasks SET taskname = '",input$edit_task_name,"', description = '",input$edit_task_description,
-                                "', status = '",input$edit_task_status,"', employee = '",input$edit_task_empl,
-                                "', plannedstart = '",paste(format(input$edit_task_dates[1], format = "%Y-%m-%d"), format(input$edit_task_start_time, format = "%H:%M:%S")),
-                                "', plannedcompletion = '",paste(format(input$edit_task_dates[2], format = "%Y-%m-%d"), format(input$edit_task_end_time, format = "%H:%M:%S")),
-                                "', colour = '",task_colors[input$edit_task_name],"' WHERE taskid = ", input$projectTimeVis_selected,";"))
-        if (input$edit_task_status == "In Progress")  dbExecute(con(), paste0("UPDATE projects SET status = 'In Progress' WHERE projectname = '", input$proj_plan,"';"))
+        tryCatch({
+          dbExecute(con(), paste0("UPDATE tasks SET taskname = '",input$edit_task_name,"', description = '",input$edit_task_description,
+                                  "', status = '",input$edit_task_status,"', employee = '",input$edit_task_empl,
+                                  "', plannedstart = '",paste(format(input$edit_task_dates[1], format = "%Y-%m-%d"), format(input$edit_task_start_time, format = "%H:%M:%S")),
+                                  "', plannedcompletion = '",paste(format(input$edit_task_dates[2], format = "%Y-%m-%d"), format(input$edit_task_end_time, format = "%H:%M:%S")),
+                                  "', colour = '",task_colors[input$edit_task_name],"' WHERE taskid = ", input$projectTimeVis_selected,";"))
+        }, 
+        error = function(e) {
+          con(dbConnect(RPostgres::Postgres(), user = "ucr5l5kv090pne", password = "p54f2fdf2a84201889d0c2eb6e634624192bea1f1a7a1abf423bcb5c7ad2a982c", host = "ec2-54-194-134-97.eu-west-1.compute.amazonaws.com", port = 5432, dbname = "d6hsqvpeb3dbtf"))
+          dbExecute(con(), paste0("UPDATE tasks SET taskname = '",input$edit_task_name,"', description = '",input$edit_task_description,
+                                  "', status = '",input$edit_task_status,"', employee = '",input$edit_task_empl,
+                                  "', plannedstart = '",paste(format(input$edit_task_dates[1], format = "%Y-%m-%d"), format(input$edit_task_start_time, format = "%H:%M:%S")),
+                                  "', plannedcompletion = '",paste(format(input$edit_task_dates[2], format = "%Y-%m-%d"), format(input$edit_task_end_time, format = "%H:%M:%S")),
+                                  "', colour = '",task_colors[input$edit_task_name],"' WHERE taskid = ", input$projectTimeVis_selected,";"))
+        })
+        if (input$edit_task_status == "In Progress")  {
+          tryCatch({
+            dbExecute(con(), paste0("UPDATE projects SET status = 'In Progress' WHERE projectname = '", input$proj_plan,"';"))
+          }, 
+          error = function(e) {
+            con(dbConnect(RPostgres::Postgres(), user = "ucr5l5kv090pne", password = "p54f2fdf2a84201889d0c2eb6e634624192bea1f1a7a1abf423bcb5c7ad2a982c", host = "ec2-54-194-134-97.eu-west-1.compute.amazonaws.com", port = 5432, dbname = "d6hsqvpeb3dbtf"))
+            dbExecute(con(), paste0("UPDATE projects SET status = 'In Progress' WHERE projectname = '", input$proj_plan,"';"))
+          })
+        }
         if (input$edit_task_status == "QC Passed") {
           df <- data.frame(
             "task" = input$projectTimeVis_selected,
@@ -1130,13 +1081,31 @@ server <- function(input, output, session) {
           task_QC_passed(df)
         }
         if (input$edit_task_status == "Completed") tasks_ready_for_QC(input$projectTimeVis_selected)
-        proj_timevis_data(updateProjTimevis(dbGetQuery(con(), paste0("SELECT * FROM tasks WHERE projectname = '",input$proj_plan, "';")))) 
+        tryCatch({
+          proj_timevis_data(updateProjTimevis(dbGetQuery(con(), paste0("SELECT * FROM tasks WHERE projectname = '",input$proj_plan, "';")))) 
+        }, 
+        error = function(e) {
+          con(dbConnect(RPostgres::Postgres(), user = "ucr5l5kv090pne", password = "p54f2fdf2a84201889d0c2eb6e634624192bea1f1a7a1abf423bcb5c7ad2a982c", host = "ec2-54-194-134-97.eu-west-1.compute.amazonaws.com", port = 5432, dbname = "d6hsqvpeb3dbtf"))
+          proj_timevis_data(updateProjTimevis(dbGetQuery(con(), paste0("SELECT * FROM tasks WHERE projectname = '",input$proj_plan, "';")))) 
+        })
         removeModal()
       })
       
       observeEvent(input$dltTaskProj, {
-        dbExecute(con(), paste0("DELETE FROM tasks WHERE taskid = ", projectTimeVis_selected,";"))
-        proj_timevis_data(dbGetQuery(con(), paste0("SELECT * FROM tasks WHERE projectname = '",input$proj_plan, "';")))
+        tryCatch({
+          dbExecute(con(), paste0("DELETE FROM tasks WHERE taskid = ", projectTimeVis_selected,";"))
+        }, 
+        error = function(e) {
+          con(dbConnect(RPostgres::Postgres(), user = "ucr5l5kv090pne", password = "p54f2fdf2a84201889d0c2eb6e634624192bea1f1a7a1abf423bcb5c7ad2a982c", host = "ec2-54-194-134-97.eu-west-1.compute.amazonaws.com", port = 5432, dbname = "d6hsqvpeb3dbtf"))
+          dbExecute(con(), paste0("DELETE FROM tasks WHERE taskid = ", projectTimeVis_selected,";"))
+        })
+        tryCatch({
+          proj_timevis_data(dbGetQuery(con(), paste0("SELECT * FROM tasks WHERE projectname = '",input$proj_plan, "';")))
+        }, 
+        error = function(e) {
+          con(dbConnect(RPostgres::Postgres(), user = "ucr5l5kv090pne", password = "p54f2fdf2a84201889d0c2eb6e634624192bea1f1a7a1abf423bcb5c7ad2a982c", host = "ec2-54-194-134-97.eu-west-1.compute.amazonaws.com", port = 5432, dbname = "d6hsqvpeb3dbtf"))
+          proj_timevis_data(dbGetQuery(con(), paste0("SELECT * FROM tasks WHERE projectname = '",input$proj_plan, "';")))
+        })
         removeModal()
       })
       
@@ -1150,7 +1119,13 @@ server <- function(input, output, session) {
   # Timeline Overview page ----
   observeEvent(input$sidebartabs,{
     if (input$sidebartabs == "timeline_overview") {
-      tasks_sheet(dbGetQuery(con(), "SELECT * FROM tasks"))
+      tryCatch({
+        tasks_sheet(dbGetQuery(con(), "SELECT * FROM tasks"))
+      }, 
+      error = function(e) {
+        con(dbConnect(RPostgres::Postgres(), user = "ucr5l5kv090pne", password = "p54f2fdf2a84201889d0c2eb6e634624192bea1f1a7a1abf423bcb5c7ad2a982c", host = "ec2-54-194-134-97.eu-west-1.compute.amazonaws.com", port = 5432, dbname = "d6hsqvpeb3dbtf"))
+        tasks_sheet(dbGetQuery(con(), "SELECT * FROM tasks"))
+      })
       updateSelectizeInput(session, "tl_ov_employees", choices = c("All", unique(tasks_sheet()$employee)))
       updateSelectizeInput(session, "tl_ov_project", choices = c("All", unique(tasks_sheet()$projectname)))
       updateSelectizeInput(session, "tl_ov_task", choices = c("All", unique(tasks_sheet()$taskname)))
@@ -1164,22 +1139,22 @@ server <- function(input, output, session) {
     if (input$tl_ov_task != "All") df <- df %>% filter(taskname == input$tl_ov_task)
     
     groups <- data.frame(
-      id = unique(df$projectname),
-      content = unique(df$projectname)
+      id = unique(df$employee),
+      content = unique(df$employee)
     )
     if (nrow(df)>0) {
       timevis_data <- data.frame(
-        content = templateTask(df$taskname, df$description,df$employee,df$status),
+        content = templateTask(df$taskname, df$description,df$projectname,df$status),
         id = df$taskid,
         start = as.POSIXct(df$plannedstart),
         end = as.POSIXct(df$plannedcompletion),
-        group = df$projectname,
+        group = df$employee,
         style = paste("background-color:", df$colour, "; font-size:5px")
       )
     } else timevis_data <- data.frame()
     
     timevis(data = timevis_data, groups = groups) %>%
-      setWindow(input$tl_ov_dates[1], input$tl_ov_dates[2]+1)
+      setWindow(paste(input$tl_ov_dates[1],"07:00") , paste(input$tl_ov_dates[2],"16:00"))
   })
   
   # User management page - postgres ----
@@ -1187,7 +1162,13 @@ server <- function(input, output, session) {
     
     if (input$sidebartabs == "user_management") {
       sage <- get_users(get_from_api("TimeTrackingUser"))
-      enabled_users <- reactiveVal(dbGetQuery(con(), "SELECT * FROM active_ts"))
+      enabled_users <- tryCatch({
+        enabled_users <- reactiveVal(dbGetQuery(con(), "SELECT * FROM active_ts"))
+      }, 
+      error = function(e) {
+        con(dbConnect(RPostgres::Postgres(), user = "ucr5l5kv090pne", password = "p54f2fdf2a84201889d0c2eb6e634624192bea1f1a7a1abf423bcb5c7ad2a982c", host = "ec2-54-194-134-97.eu-west-1.compute.amazonaws.com", port = 5432, dbname = "d6hsqvpeb3dbtf"))
+        enabled_users <- reactiveVal(dbGetQuery(con(), "SELECT * FROM active_ts"))
+      })
       
       output$active_empl_table <- renderDT({
         df <- enabled_users() %>%
@@ -1256,8 +1237,20 @@ server <- function(input, output, session) {
         for (i in input$active_empl_table_rows_selected) {
           userid <- c(userid, enabled_users()[i,]$userid)
         }
-        dbExecute(con(), paste0("DELETE FROM active_ts WHERE userid IN (",paste(userid, collapse = ", "),")"))
-        enabled_users(dbGetQuery(con(), "SELECT * FROM active_ts"))
+        tryCatch({
+          dbExecute(con(), paste0("DELETE FROM active_ts WHERE userid IN (",paste(userid, collapse = ", "),")"))
+        }, 
+        error = function(e) {
+          con(dbConnect(RPostgres::Postgres(), user = "ucr5l5kv090pne", password = "p54f2fdf2a84201889d0c2eb6e634624192bea1f1a7a1abf423bcb5c7ad2a982c", host = "ec2-54-194-134-97.eu-west-1.compute.amazonaws.com", port = 5432, dbname = "d6hsqvpeb3dbtf"))
+          dbExecute(con(), paste0("DELETE FROM active_ts WHERE userid IN (",paste(userid, collapse = ", "),")"))
+        })
+        tryCatch({
+          enabled_users(dbGetQuery(con(), "SELECT * FROM active_ts"))
+        }, 
+        error = function(e) {
+          con(dbConnect(RPostgres::Postgres(), user = "ucr5l5kv090pne", password = "p54f2fdf2a84201889d0c2eb6e634624192bea1f1a7a1abf423bcb5c7ad2a982c", host = "ec2-54-194-134-97.eu-west-1.compute.amazonaws.com", port = 5432, dbname = "d6hsqvpeb3dbtf"))
+          enabled_users(dbGetQuery(con(), "SELECT * FROM active_ts"))
+        })
         removeModal()
       })
       
@@ -1272,17 +1265,35 @@ server <- function(input, output, session) {
         ap <- ifelse("Admin - Purchases" %in% input$new_user_role, "true", "false")
         ai <- ifelse("Admin - Invoicing" %in% input$new_user_role, "true", "false")
         
-        dbExecute(con(), paste0("INSERT INTO active_ts (name, wa_number, userid, clock, pm, md, ac, ap, ai) VALUES ('", 
-                                input$new_user_name,"', '", input$new_user_number,"','",userid,"','",clock,
-                                "','",pm,"','",md,"','",ac,"','",ap,"','",ai,"');"))
-        enabled_users(dbGetQuery(con(), "SELECT * FROM active_ts"))
+        tryCatch({
+          dbExecute(con(), paste0("INSERT INTO active_ts (name, wa_number, userid, clock, pm, md, ac, ap, ai) VALUES ('", 
+                                  input$new_user_name,"', '", input$new_user_number,"','",userid,"','",clock,
+                                  "','",pm,"','",md,"','",ac,"','",ap,"','",ai,"');"))        }, 
+          error = function(e) {
+            con(dbConnect(RPostgres::Postgres(), user = "ucr5l5kv090pne", password = "p54f2fdf2a84201889d0c2eb6e634624192bea1f1a7a1abf423bcb5c7ad2a982c", host = "ec2-54-194-134-97.eu-west-1.compute.amazonaws.com", port = 5432, dbname = "d6hsqvpeb3dbtf"))
+            dbExecute(con(), paste0("INSERT INTO active_ts (name, wa_number, userid, clock, pm, md, ac, ap, ai) VALUES ('", 
+                                    input$new_user_name,"', '", input$new_user_number,"','",userid,"','",clock,
+                                    "','",pm,"','",md,"','",ac,"','",ap,"','",ai,"');"))        })
+        
+        tryCatch({
+          enabled_users(dbGetQuery(con(), "SELECT * FROM active_ts"))
+        }, 
+        error = function(e) {
+          con(dbConnect(RPostgres::Postgres(), user = "ucr5l5kv090pne", password = "p54f2fdf2a84201889d0c2eb6e634624192bea1f1a7a1abf423bcb5c7ad2a982c", host = "ec2-54-194-134-97.eu-west-1.compute.amazonaws.com", port = 5432, dbname = "d6hsqvpeb3dbtf"))
+          enabled_users(dbGetQuery(con(), "SELECT * FROM active_ts"))
+        })
         removeModal()
       })
       
       observeEvent(input$active_empl_table_cell_edit, {
         userid <- enabled_users()[input$active_empl_table_cell_edit$row,]$userid
-        dbExecute(con(), paste0("UPDATE active_ts SET wa_number = '", input$active_empl_table_cell_edit$value, 
-                                "' WHERE userid = ", userid))
+        tryCatch({
+          dbExecute(con(), paste0("UPDATE active_ts SET wa_number = '", input$active_empl_table_cell_edit$value, 
+                                  "' WHERE userid = ", userid))        }, 
+        error = function(e) {
+          con(dbConnect(RPostgres::Postgres(), user = "ucr5l5kv090pne", password = "p54f2fdf2a84201889d0c2eb6e634624192bea1f1a7a1abf423bcb5c7ad2a982c", host = "ec2-54-194-134-97.eu-west-1.compute.amazonaws.com", port = 5432, dbname = "d6hsqvpeb3dbtf"))
+          dbExecute(con(), paste0("UPDATE active_ts SET wa_number = '", input$active_empl_table_cell_edit$value, 
+                                  "' WHERE userid = ", userid))        })
       })
     }
   })                           
