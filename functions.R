@@ -180,7 +180,6 @@ get_new_webhooks <- function() {
     api_data <- content(response, "text", encoding = "UTF-8")
     parsed_data <- fromJSON(api_data)
     if (length(parsed_data$messages) > 0) {
-      print("New webhook received.")
       con(dbConnect(RPostgres::Postgres(), user = "ucr5l5kv090pne", password = "p54f2fdf2a84201889d0c2eb6e634624192bea1f1a7a1abf423bcb5c7ad2a982c", host = "ec2-54-194-134-97.eu-west-1.compute.amazonaws.com", port = 5432, dbname = "d6hsqvpeb3dbtf"))
       received_df <- data.frame()
       sent_df <- data.frame()
@@ -188,6 +187,7 @@ get_new_webhooks <- function() {
         if (!is.null(webhook$changes[[1]]$value$messages[[1]])) {
           rec_webhook <- webhook$changes[[1]]$value$messages[[1]]
           type <- rec_webhook$type
+          print(paste0("New webhook received: ", type))
           if (type == "button") {
             print(paste0("New" ,type," Webhook Received: ",rec_webhook$from, ": ", rec_webhook$button$text, 
                          ". Contextid = ",rec_webhook$context$id))
