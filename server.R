@@ -530,7 +530,7 @@ server <- function(input, output, session) {
         list("type" = "text", "text" = as.character(input$order_amount))
       )
       #KARLA Test this
-      send_template(wa_id, body_params = body, template_name = 'request_payemt_without_quote', project = orders_selected_row()$project, orderid = orders_selected_row()$id)
+      send_template(ac, body_params = body, template_name = 'request_payemt_without_quote', project = orders_selected_row()$project, orderid = orders_selected_row()$id)
       tryCatch({
         dbExecute(con(), paste0("UPDATE orders SET status = 'Payment Requested', lastupdate = '",format(Sys.Date(), format = "%d-%m-%Y"),"' WHERE id = ",orders_selected_row()$id,";" ))
       }, 
