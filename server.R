@@ -74,8 +74,8 @@ server <- function(input, output, session) {
   observeEvent(input$update_proj_status, {
     if (length(input$project_admin_table_rows_selected)==0) show_alert("No project was selected.")
     else {
-      if (length(input$project_admin_table_rows_selected)==1) choices <- c("Not Started", "In Progress", "Ready for QC", "To be Invoiced", "Invoiced")
-      else choices <- c("Not Started", "In Progress", "Ready for QC", "To be Invoiced")
+      if (length(input$project_admin_table_rows_selected)==1) choices <- c("Not Started", "In Progress", "Ready for QC", "To be Invoiced", "Invoiced","Cancelled")
+      else choices <- c("Not Started", "In Progress", "Ready for QC", "To be Invoiced","Cancelled")
       modalDialog(
         title = "Update the Status of Selected Projects",
         div(
@@ -729,9 +729,10 @@ server <- function(input, output, session) {
       })
       proj_timevis_data <- reactiveVal(data.frame())
       tasks <- reactiveVal(get_tasks(get_from_api("TimeTrackingTask","Get","$filter=Active eq true&includeProjectTasks=True&")))
+      filtered_projects <- projects() %>% filter(Status %in% c("Not Started", "In Progress"))
       
-      choices_display <- paste0(projects()$Name, " (", projects()$Customer, ")")
-      named_vector <- setNames(projects()$Name, choices_display)
+      choices_display <- paste0(filtered_projects$Name, " (", filtered_projects$Customer, ")")
+      named_vector <- setNames(filtered_projects$Name, choices_display)
       updateSelectizeInput(session, "proj_plan", label = NULL, choices = c("Select Project", named_vector))
       
       observe({
