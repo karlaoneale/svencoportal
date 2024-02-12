@@ -729,7 +729,7 @@ server <- function(input, output, session) {
       })
       proj_timevis_data <- reactiveVal(data.frame())
       tasks <- reactiveVal(get_tasks(get_from_api("TimeTrackingTask","Get","$filter=Active eq true&includeProjectTasks=True&")))
-      filtered_projects <- projects() %>% filter(Status %in% c("Not Started", "In Progress"))
+      filtered_projects <- projects()
       
       choices_display <- paste0(filtered_projects$Name, " (", filtered_projects$Customer, ")")
       named_vector <- setNames(filtered_projects$Name, choices_display)
