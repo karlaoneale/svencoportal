@@ -195,20 +195,20 @@ server <- function(input, output, session) {
   observeEvent(input$refreshOrders, {
     if (input$include_received) {
       tryCatch({
-        orders_data(dbGetQuery(con(), paste0("SELECT * FROM orders;")))
+        orders_data(dbGetQuery(con(), paste0("SELECT * FROM orders;")) %>% arrange(desc(id)))
       }, 
       error = function(e) {
         con(dbConnect(RPostgres::Postgres(), user = "ucr5l5kv090pne", password = "p54f2fdf2a84201889d0c2eb6e634624192bea1f1a7a1abf423bcb5c7ad2a982c", host = "ec2-54-194-134-97.eu-west-1.compute.amazonaws.com", port = 5432, dbname = "d6hsqvpeb3dbtf"))
-        orders_data(dbGetQuery(con(), paste0("SELECT * FROM orders;")))
+        orders_data(dbGetQuery(con(), paste0("SELECT * FROM orders;")) %>% arrange(desc(id)))
       })
     }
     else {
       tryCatch({
-        orders_data(dbGetQuery(con(), paste0("SELECT * FROM orders WHERE status != 'Arrived';")))
+        orders_data(dbGetQuery(con(), paste0("SELECT * FROM orders WHERE status != 'Arrived';")) %>% arrange(desc(id)))
       }, 
       error = function(e) {
         con(dbConnect(RPostgres::Postgres(), user = "ucr5l5kv090pne", password = "p54f2fdf2a84201889d0c2eb6e634624192bea1f1a7a1abf423bcb5c7ad2a982c", host = "ec2-54-194-134-97.eu-west-1.compute.amazonaws.com", port = 5432, dbname = "d6hsqvpeb3dbtf"))
-        orders_data(dbGetQuery(con(), paste0("SELECT * FROM orders WHERE status != 'Arrived';")))
+        orders_data(dbGetQuery(con(), paste0("SELECT * FROM orders WHERE status != 'Arrived';")) %>% arrange(desc(id)))
       })
     }
   })
@@ -216,24 +216,23 @@ server <- function(input, output, session) {
   output$order_table <- renderDT({
     if (input$include_received) {
       tryCatch({
-        orders_data(dbGetQuery(con(), paste0("SELECT * FROM orders;")))
+        orders_data(dbGetQuery(con(), paste0("SELECT * FROM orders;")) %>% arrange(desc(id)))
       }, 
       error = function(e) {
         con(dbConnect(RPostgres::Postgres(), user = "ucr5l5kv090pne", password = "p54f2fdf2a84201889d0c2eb6e634624192bea1f1a7a1abf423bcb5c7ad2a982c", host = "ec2-54-194-134-97.eu-west-1.compute.amazonaws.com", port = 5432, dbname = "d6hsqvpeb3dbtf"))
-        orders_data(dbGetQuery(con(), paste0("SELECT * FROM orders;")))
+        orders_data(dbGetQuery(con(), paste0("SELECT * FROM orders;")) %>% arrange(desc(id)))
       })
     }
     else {
       tryCatch({
-        orders_data(dbGetQuery(con(), paste0("SELECT * FROM orders WHERE status != 'Arrived';")))
+        orders_data(dbGetQuery(con(), paste0("SELECT * FROM orders WHERE status != 'Arrived';")) %>% arrange(desc(id)))
       }, 
       error = function(e) {
         con(dbConnect(RPostgres::Postgres(), user = "ucr5l5kv090pne", password = "p54f2fdf2a84201889d0c2eb6e634624192bea1f1a7a1abf423bcb5c7ad2a982c", host = "ec2-54-194-134-97.eu-west-1.compute.amazonaws.com", port = 5432, dbname = "d6hsqvpeb3dbtf"))
-        orders_data(dbGetQuery(con(), paste0("SELECT * FROM orders WHERE status != 'Arrived';")))
+        orders_data(dbGetQuery(con(), paste0("SELECT * FROM orders WHERE status != 'Arrived';")) %>% arrange(desc(id)))
       })
     }
     datatable(orders_data() %>%
-                arrange(desc(datesubmitted)) %>%
                 mutate(
                   "ID" = id,
                   "Project" = project,
@@ -446,20 +445,20 @@ server <- function(input, output, session) {
     
     if (input$include_received) {
       tryCatch({
-        orders_data(dbGetQuery(con(), paste0("SELECT * FROM orders;")))
+        orders_data(dbGetQuery(con(), paste0("SELECT * FROM orders;")) %>% arrange(desc(id)))
       }, 
       error = function(e) {
         con(dbConnect(RPostgres::Postgres(), user = "ucr5l5kv090pne", password = "p54f2fdf2a84201889d0c2eb6e634624192bea1f1a7a1abf423bcb5c7ad2a982c", host = "ec2-54-194-134-97.eu-west-1.compute.amazonaws.com", port = 5432, dbname = "d6hsqvpeb3dbtf"))
-        orders_data(dbGetQuery(con(), paste0("SELECT * FROM orders;")))
+        orders_data(dbGetQuery(con(), paste0("SELECT * FROM orders;")) %>% arrange(desc(id)))
       })
     }
     else {
       tryCatch({
-        orders_data(dbGetQuery(con(), paste0("SELECT * FROM orders WHERE status != 'Arrived';")))
+        orders_data(dbGetQuery(con(), paste0("SELECT * FROM orders WHERE status != 'Arrived';")) %>% arrange(desc(id)))
       }, 
       error = function(e) {
         con(dbConnect(RPostgres::Postgres(), user = "ucr5l5kv090pne", password = "p54f2fdf2a84201889d0c2eb6e634624192bea1f1a7a1abf423bcb5c7ad2a982c", host = "ec2-54-194-134-97.eu-west-1.compute.amazonaws.com", port = 5432, dbname = "d6hsqvpeb3dbtf"))
-        orders_data(dbGetQuery(con(), paste0("SELECT * FROM orders WHERE status != 'Arrived';")))
+        orders_data(dbGetQuery(con(), paste0("SELECT * FROM orders WHERE status != 'Arrived';")) %>% arrange(desc(id)))
       })
     }
     removeModal()
@@ -494,20 +493,20 @@ server <- function(input, output, session) {
     }
     if (input$include_received) {
       tryCatch({
-        orders_data(dbGetQuery(con(), paste0("SELECT * FROM orders;")))
+        orders_data(dbGetQuery(con(), paste0("SELECT * FROM orders;")) %>% arrange(desc(id)))
       }, 
       error = function(e) {
         con(dbConnect(RPostgres::Postgres(), user = "ucr5l5kv090pne", password = "p54f2fdf2a84201889d0c2eb6e634624192bea1f1a7a1abf423bcb5c7ad2a982c", host = "ec2-54-194-134-97.eu-west-1.compute.amazonaws.com", port = 5432, dbname = "d6hsqvpeb3dbtf"))
-        orders_data(dbGetQuery(con(), paste0("SELECT * FROM orders;")))
+        orders_data(dbGetQuery(con(), paste0("SELECT * FROM orders;")) %>% arrange(desc(id)))
       })
     }
     else {
       tryCatch({
-        orders_data(dbGetQuery(con(), paste0("SELECT * FROM orders WHERE status != 'Arrived';")))
+        orders_data(dbGetQuery(con(), paste0("SELECT * FROM orders WHERE status != 'Arrived';") %>% arrange(desc(id))))
       }, 
       error = function(e) {
         con(dbConnect(RPostgres::Postgres(), user = "ucr5l5kv090pne", password = "p54f2fdf2a84201889d0c2eb6e634624192bea1f1a7a1abf423bcb5c7ad2a982c", host = "ec2-54-194-134-97.eu-west-1.compute.amazonaws.com", port = 5432, dbname = "d6hsqvpeb3dbtf"))
-        orders_data(dbGetQuery(con(), paste0("SELECT * FROM orders WHERE status != 'Arrived';")))
+        orders_data(dbGetQuery(con(), paste0("SELECT * FROM orders WHERE status != 'Arrived';")) %>% arrange(desc(id)))
       })
     }
     removeModal()
@@ -543,7 +542,7 @@ server <- function(input, output, session) {
       if (nrow(input$quote_file) == 0) output$file_upload_error <- renderText({"No files were selected."})
       else {
         path <- paste0("ProjectQuotes/",substr(orders_selected_row()$project, 1,4),"/")
-        try(path <- drive_mkdir(substr(orders_selected_row()$project, 1,4), path = "ProjectQuotes/", overwrite = FALSE))
+        try(path <- drive_mkdir(substr(orders_selected_row()$id, 1,4), path = "ProjectQuotes/", overwrite = FALSE))
         for (i in 1:nrow(input$quote_file)) {
           row <- input$quote_file[i, ]
           drive_upload(row$datapath, 
@@ -600,20 +599,20 @@ server <- function(input, output, session) {
     }
     if (input$include_received) {
       tryCatch({
-        orders_data(dbGetQuery(con(), paste0("SELECT * FROM orders;")))
+        orders_data(dbGetQuery(con(), paste0("SELECT * FROM orders;")) %>% arrange(desc(id)))
       }, 
       error = function(e) {
         con(dbConnect(RPostgres::Postgres(), user = "ucr5l5kv090pne", password = "p54f2fdf2a84201889d0c2eb6e634624192bea1f1a7a1abf423bcb5c7ad2a982c", host = "ec2-54-194-134-97.eu-west-1.compute.amazonaws.com", port = 5432, dbname = "d6hsqvpeb3dbtf"))
-        orders_data(dbGetQuery(con(), paste0("SELECT * FROM orders;")))
+        orders_data(dbGetQuery(con(), paste0("SELECT * FROM orders;")) %>% arrange(desc(id)))
       })
     }
     else {
       tryCatch({
-        orders_data(dbGetQuery(con(), paste0("SELECT * FROM orders WHERE status != 'Arrived';")))
+        orders_data(dbGetQuery(con(), paste0("SELECT * FROM orders WHERE status != 'Arrived';")) %>% arrange(desc(id)))
       }, 
       error = function(e) {
         con(dbConnect(RPostgres::Postgres(), user = "ucr5l5kv090pne", password = "p54f2fdf2a84201889d0c2eb6e634624192bea1f1a7a1abf423bcb5c7ad2a982c", host = "ec2-54-194-134-97.eu-west-1.compute.amazonaws.com", port = 5432, dbname = "d6hsqvpeb3dbtf"))
-        orders_data(dbGetQuery(con(), paste0("SELECT * FROM orders WHERE status != 'Arrived';")))
+        orders_data(dbGetQuery(con(), paste0("SELECT * FROM orders WHERE status != 'Arrived';")) %>% arrange(desc(id)))
       })
     }
         removeModal()
@@ -694,19 +693,19 @@ server <- function(input, output, session) {
     create_order(df)
     if (input$include_received) {
       tryCatch({
-        orders_data(dbGetQuery(con(), paste0("SELECT * FROM orders;")))
+        orders_data(dbGetQuery(con(), paste0("SELECT * FROM orders;")) %>% arrange(desc(id)))
       }, 
       error = function(e) {
         con(dbConnect(RPostgres::Postgres(), user = "ucr5l5kv090pne", password = "p54f2fdf2a84201889d0c2eb6e634624192bea1f1a7a1abf423bcb5c7ad2a982c", host = "ec2-54-194-134-97.eu-west-1.compute.amazonaws.com", port = 5432, dbname = "d6hsqvpeb3dbtf"))
-        orders_data(dbGetQuery(con(), paste0("SELECT * FROM orders;")))
+        orders_data(dbGetQuery(con(), paste0("SELECT * FROM orders;")) %>% arrange(desc(id)))
       })
     }
     else{
       tryCatch({
-        orders_data(dbGetQuery(con(), paste0("SELECT * FROM orders WHERE status != 'Arrived';")))      }, 
+        orders_data(dbGetQuery(con(), paste0("SELECT * FROM orders WHERE status != 'Arrived';")) %>% arrange(desc(id)))      }, 
       error = function(e) {
         con(dbConnect(RPostgres::Postgres(), user = "ucr5l5kv090pne", password = "p54f2fdf2a84201889d0c2eb6e634624192bea1f1a7a1abf423bcb5c7ad2a982c", host = "ec2-54-194-134-97.eu-west-1.compute.amazonaws.com", port = 5432, dbname = "d6hsqvpeb3dbtf"))
-        orders_data(dbGetQuery(con(), paste0("SELECT * FROM orders WHERE status != 'Arrived';")))      })
+        orders_data(dbGetQuery(con(), paste0("SELECT * FROM orders WHERE status != 'Arrived';")) %>% arrange(desc(id)))      })
     } 
     removeModal()
   })

@@ -187,7 +187,18 @@ get_new_webhooks <- function() {
         if (!is.null(webhook$changes[[1]]$value$messages[[1]])) {
           rec_webhook <- webhook$changes[[1]]$value$messages[[1]]
           type <- rec_webhook$type
-          print(paste0("New webhook received: ", type))
+          print(paste0("New ",type," webhook received from ", rec_webhook$from))
+          from <- tryCatch({
+            from <- (dbGetQuery(con(), paste0("SELECT name FROM active_ts WHERE wa_number = '",message_details$from,"';"))$name)[1]
+          }, 
+          error = function(e) {
+            con(dbConnect(RPostgres::Postgres(), user = "ucr5l5kv090pne", password = "p54f2fdf2a84201889d0c2eb6e634624192bea1f1a7a1abf423bcb5c7ad2a982c", host = "ec2-54-194-134-97.eu-west-1.compute.amazonaws.com", port = 5432, dbname = "d6hsqvpeb3dbtf"))
+            from <- (dbGetQuery(con(), paste0("SELECT name FROM active_ts WHERE wa_number = '",message_details$from,"';"))$name)[1]
+          })
+          if (is.na(from)) {
+            send_template(rec_webhook$from, template_name = "unknown_number")
+            next
+          }
           if (type == "button") {
             print(paste0("New" ,type," Webhook Received: ",rec_webhook$from, ": ", rec_webhook$button$text, 
                          ". Contextid = ",rec_webhook$context$id))
@@ -219,7 +230,7 @@ get_new_webhooks <- function() {
               send_invoice_to_PM(df)
             } else if (grepl("^P[0-9]{4}.*$", df$text)) {
               create_order(df)
-            } else handle_wa_button(df)
+            } else send_template(rec_webhook$from, template_name = "unknown_request")
             
           } else if (type == "image") {
             print(paste0("New" ,type," Webhook Received: ",rec_webhook$from, ": ", rec_webhook$image$caption, 
@@ -246,7 +257,7 @@ get_new_webhooks <- function() {
             else if (grepl("^P[0-9]{4}.*$", df$text)) {
               drive_link <- get_WA_image_and_upload(df, "ProjectOrders", substr(df$text, 2,5))
               create_order(df, drive_link)
-            }
+            } else send_template(rec_webhook$from, template_name = "unknown_request")
           } else if (type == "document") {
             print(paste0("New" ,type," webhook received: ",rec_webhook$from, ": ", rec_webhook$document$caption, 
                          ". Contextid = ",rec_webhook$context$id))
@@ -590,7 +601,7 @@ handle_wa_button <- function(button_details, invoiceName=NULL) {
           dbExecute(con(), paste0("UPDATE orders SET status = 'Paid', lastupdate = '",format(Sys.Date(), format = "%d-%m-%Y"),"' WHERE id = ", orderid, ";"))
         })
       }
-    }
+    } else send_template(rec_webhook$from, template_name = "unknown_request")
   }
   
   if (!is.na(button_details$text)) {
@@ -605,7 +616,7 @@ handle_wa_button <- function(button_details, invoiceName=NULL) {
       })
     }
     
-    if (button_details$text == "QC Passed!") {
+    else if (button_details$text == "QC Passed!") {
       tryCatch({
         task_QC_passed(dbGetQuery(con(), paste0("SELECT * FROM sent_wa WHERE id = '", button_details$contextid, "';")))
       }, 
@@ -615,7 +626,7 @@ handle_wa_button <- function(button_details, invoiceName=NULL) {
       })
     }
     
-    if (button_details$text == "Approve Quote") {
+    else if (button_details$text == "Approve Quote") {
       sent_wa <- tryCatch({
         sent_wa <- dbGetQuery(con(), paste0("SELECT * FROM sent_wa WHERE id = '",button_details$contextid,"';"))
       }, 
@@ -660,7 +671,7 @@ handle_wa_button <- function(button_details, invoiceName=NULL) {
       })
     }
     
-    if (button_details$text == "Proceed Without Payment") {
+    else if (button_details$text == "Proceed Without Payment") {
       sent_wa <- tryCatch({
         sent_wa <- dbGetQuery(con(), paste0("SELECT * FROM sent_wa WHERE id = '",button_details$contextid,"';"))
       }, 
@@ -704,7 +715,7 @@ handle_wa_button <- function(button_details, invoiceName=NULL) {
       })
     }
     
-    if (button_details$text == "Complete Project") {
+    else if (button_details$text == "Complete Project") {
       projectName <- tryCatch({
         projectName <- dbGetQuery(con(), paste0("SELECT project FROM sent_wa WHERE id = '", button_details$contextid, "';"))$project
       }, 
@@ -743,7 +754,7 @@ handle_wa_button <- function(button_details, invoiceName=NULL) {
       send_template(md, body, template_name = 'md_project_completed', project = projectName)
     }
     
-    if (button_details$text == "Approve Invoice") {
+    else if (button_details$text == "Approve Invoice") {
       sent_WA <- tryCatch({
         sent_WA <- dbGetQuery(con(), paste0("SELECT * FROM sent_wa WHERE id = '",button_details$contextid,"';"))
       }, 
@@ -817,8 +828,8 @@ handle_wa_button <- function(button_details, invoiceName=NULL) {
           dbExecute(con, paste0("UPDATE projects SET status = 'Invoiced', lastupdate = '",format(Sys.Date(), format = "%d-%m-%Y"),
                                 "' WHERE projectname = '", sent_WA$project, "';"))        })
       }
-    }
-  }
+    } else send_template(rec_webhook$from, template_name = "unknown_request")
+  } else send_template(rec_webhook$from, template_name = "unknown_request")
 }
 
 get_WA_number <- function(number) {
