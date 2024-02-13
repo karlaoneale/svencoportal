@@ -147,10 +147,10 @@ send_template <- function(wa_id, body_params = NULL, template_name, heading = NU
                              , "',", as.numeric(Sys.time()),
                              ",'", wa_id, "','", taskid, "','", project, "','", orderid, "','", docid,"', '",invoicename,"','",template_name,"');"))
     })
-    print("Template sent.")
+    print(paste0("Sent ",template_name," template to ",wa_id))
     return(TRUE)
   } else {
-    print(paste("Error: API request failed with status code", status_code))
+    print(paste("Error: API request failed with status code", status_code, " TEMPLATE: ", template_name, "\n ", body_params))
     return(FALSE)
   }
 }
@@ -388,17 +388,24 @@ create_order <- function(message_details, drive_link = NULL) {
     con(dbConnect(RPostgres::Postgres(), user = "ucr5l5kv090pne", password = "p54f2fdf2a84201889d0c2eb6e634624192bea1f1a7a1abf423bcb5c7ad2a982c", host = "ec2-54-194-134-97.eu-west-1.compute.amazonaws.com", port = 5432, dbname = "d6hsqvpeb3dbtf"))
     admin <- dbGetQuery(con(), paste0("SELECT wa_number FROM active_ts WHERE ap = 'true';"))$wa_number
   })
+  pm <- tryCatch({
+    pm <- dbGetQuery(con(), paste0("SELECT wa_number FROM active_ts WHERE pm = 'true';"))$wa_number
+  }, 
+  error = function(e) {
+    con(dbConnect(RPostgres::Postgres(), user = "ucr5l5kv090pne", password = "p54f2fdf2a84201889d0c2eb6e634624192bea1f1a7a1abf423bcb5c7ad2a982c", host = "ec2-54-194-134-97.eu-west-1.compute.amazonaws.com", port = 5432, dbname = "d6hsqvpeb3dbtf"))
+    pm <- dbGetQuery(con(), paste0("SELECT wa_number FROM active_ts WHERE pm = 'true';"))$wa_number
+  })
   if (is.null(drive_link)) {
     sent_to_admin <- send_template(admin, body_params, "new_order", project = projectName, orderid = orderid)
-    send_template(admin, body_params, "new_order_pm", project = projectName, orderid = orderid)
+    send_template(pm, body_params, "new_order_pm", project = projectName, orderid = orderid)
   } else {
     drive_auth(path = google_drive_service_acc)
     header <- list('type' = 'image', 'image' = list('id' = message_details$attachmentid))
     sent_to_admin <- send_template(admin, body_params, "new_order_image", heading = header ,project = projectName, orderid = orderid)
-    send_template(admin, body_params, "new_order_pm_image", heading = header, project = projectName, orderid = orderid)
+    send_template(pm, body_params, "new_order_pm_image", heading = header, project = projectName, orderid = orderid)
   }
-  if (sent_to_admin) send_template(admin, template_name = "order_received", project = projectName)
-  else send_template(wadmin, template_name = "order_failed", project = projectName)
+  if (sent_to_admin) send_template(message_details$from, template_name = "order_received", project = projectName)
+  else send_template(message_details$from, template_name = "order_failed", project = projectName)
 }
 
 add_note <- function(df) {
