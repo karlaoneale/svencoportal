@@ -986,7 +986,6 @@ forward_image <- function(df, from) {
     md <- dbGetQuery(con(), paste0("SELECT wa_number FROM active_ts WHERE md = 'true';"))$wa_number
   })
   header <- list('type' = 'image', 'image' = list('id' = df$attachmentid))
-  browser()
   projectName <- df$text
   body <- list(
     list('type' = 'text', 'text' = from),
