@@ -273,11 +273,11 @@ server <- function(input, output, session) {
       orders_selected_row(orders_data()[input$order_table_cells_selected[,1],])
       if (selected_col == "quotes") {
         tryCatch({
-          quotes <- dbGetQuery(con(), paste0("SELECT quotes FROM orders WHERE id = ",orders_selected_row$id,";"))$quotes
+          quotes <- dbGetQuery(con(), paste0("SELECT quotes FROM orders WHERE id = ",orders_selected_row()$id,";"))$quotes
         }, 
         error = function(e) {
           con(dbConnect(RPostgres::Postgres(), user = "ucr5l5kv090pne", password = "p54f2fdf2a84201889d0c2eb6e634624192bea1f1a7a1abf423bcb5c7ad2a982c", host = "ec2-54-194-134-97.eu-west-1.compute.amazonaws.com", port = 5432, dbname = "d6hsqvpeb3dbtf"))
-          quotes <- dbGetQuery(con(), paste0("SELECT quotes FROM orders WHERE id = ",orders_selected_row$id,";"))$quotes
+          quotes <- dbGetQuery(con(), paste0("SELECT quotes FROM orders WHERE id = ",orders_selected_row()$id,";"))$quotes
         })
         if (!is.na(quotes)) {
           modalDialog(
