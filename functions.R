@@ -189,11 +189,11 @@ get_new_webhooks <- function() {
           type <- rec_webhook$type
           print(paste0("New ",type," webhook received from ", rec_webhook$from))
           from <- tryCatch({
-            from <- (dbGetQuery(con(), paste0("SELECT name FROM active_ts WHERE wa_number = '",message_details$from,"';"))$name)[1]
+            from <- (dbGetQuery(con(), paste0("SELECT name FROM active_ts WHERE wa_number = '",rec_webhook$from,"';"))$name)[1]
           }, 
           error = function(e) {
             con(dbConnect(RPostgres::Postgres(), user = "ucr5l5kv090pne", password = "p54f2fdf2a84201889d0c2eb6e634624192bea1f1a7a1abf423bcb5c7ad2a982c", host = "ec2-54-194-134-97.eu-west-1.compute.amazonaws.com", port = 5432, dbname = "d6hsqvpeb3dbtf"))
-            from <- (dbGetQuery(con(), paste0("SELECT name FROM active_ts WHERE wa_number = '",message_details$from,"';"))$name)[1]
+            from <- (dbGetQuery(con(), paste0("SELECT name FROM active_ts WHERE wa_number = '",rec_webhook$from,"';"))$name)[1]
           })
           if (is.na(from)) {
             send_template(rec_webhook$from, template_name = "unknown_number")

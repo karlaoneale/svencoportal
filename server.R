@@ -272,56 +272,65 @@ server <- function(input, output, session) {
       orders_selected_col(selected_col)
       orders_selected_row(orders_data()[input$order_table_cells_selected[,1],])
       if (selected_col == "quotes") {
-        modalDialog(
-          title = "Upload a Quote",
-          div(
-            style = "display:inline-block",
-            checkboxInput(
-              "approve_without_quotes",
-              "Submit for approval without quotes",
-              value = FALSE,
-              width = "270px"
-            )
-          ),
-          div(
-            id = "file_div",
-            style = "display:inline-block",
-            fileInput(
-              "quote_file",
-              "Upload:",
-              multiple = TRUE,
-              width = "270px"
-            )
-          ),
-          div(
-            id = "order_amount_div",
-            style = "display:inline-block",
-            numericInput(
-              "order_amount",
-              "Amount Needed in Rands:",
-              value = 0,
-              width = "270px"
-            )
-          ),
-          size = "s",
-          easyClose = FALSE,
-          footer = div(
-            class = "pull-right container",
-            fluidRow(textOutput("file_upload_error")),
-            actionButton(
-              inputId = "dismiss_modal",
-              label = "Close",
-              icon = icon("xmark"),
-              class = "add_proj"
+        tryCatch({
+          quotes <- dbGetQuery(con(), paste0("SELECT quotes FROM orders WHERE id = ",orders_selected_row$id,";"))$quotes
+        }, 
+        error = function(e) {
+          con(dbConnect(RPostgres::Postgres(), user = "ucr5l5kv090pne", password = "p54f2fdf2a84201889d0c2eb6e634624192bea1f1a7a1abf423bcb5c7ad2a982c", host = "ec2-54-194-134-97.eu-west-1.compute.amazonaws.com", port = 5432, dbname = "d6hsqvpeb3dbtf"))
+          quotes <- dbGetQuery(con(), paste0("SELECT quotes FROM orders WHERE id = ",orders_selected_row$id,";"))$quotes
+        })
+        if (!is.na(quotes)) {
+          modalDialog(
+            title = "Upload a Quote",
+            div(
+              style = "display:inline-block",
+              checkboxInput(
+                "approve_without_quotes",
+                "Submit for approval without quotes",
+                value = FALSE,
+                width = "270px"
+              )
             ),
-            actionButton(
-              inputId = "upload_files",
-              label = "Confirm",
-              icon = icon("plus"),
-              class = "back"
+            div(
+              id = "file_div",
+              style = "display:inline-block",
+              fileInput(
+                "quote_file",
+                "Upload:",
+                multiple = TRUE,
+                width = "270px"
+              )
+            ),
+            div(
+              id = "order_amount_div",
+              style = "display:inline-block",
+              numericInput(
+                "order_amount",
+                "Amount Needed in Rands:",
+                value = 0,
+                width = "270px"
+              )
+            ),
+            size = "s",
+            easyClose = FALSE,
+            footer = div(
+              class = "pull-right container",
+              fluidRow(textOutput("file_upload_error")),
+              actionButton(
+                inputId = "dismiss_modal",
+                label = "Close",
+                icon = icon("xmark"),
+                class = "add_proj"
+              ),
+              actionButton(
+                inputId = "upload_files",
+                label = "Confirm",
+                icon = icon("plus"),
+                class = "back"
+              )
             )
-          )
-        ) %>% showModal()
+          ) %>% showModal()
+        }
         
         observeEvent(input$approve_without_quotes,{
           if (input$approve_without_quotes) {
@@ -588,7 +597,7 @@ server <- function(input, output, session) {
           dbExecute(con(), paste0("UPDATE orders SET status = 'Quotes Uploaded', lastupdate = '",format(Sys.Date(), format = "%d-%m-%Y"),"' WHERE id = ",orders_selected_row()$id,";" ))
         })
         
-        folder <- drive_find(pattern = substr(orders_selected_row()$project, 1,4), type = "folder")
+        folder <- drive_find(pattern = as.character(orders_selected_row()$id), type = "folder")
         tryCatch({
           dbExecute(con(), paste0("UPDATE orders SET quotes = '",folder$drive_resource[[1]]$webViewLink, "' WHERE id = ",orders_selected_row()$id,";" ))
         }, 
