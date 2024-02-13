@@ -253,6 +253,7 @@ get_new_webhooks <- function() {
                 con(dbConnect(RPostgres::Postgres(), user = "ucr5l5kv090pne", password = "p54f2fdf2a84201889d0c2eb6e634624192bea1f1a7a1abf423bcb5c7ad2a982c", host = "ec2-54-194-134-97.eu-west-1.compute.amazonaws.com", port = 5432, dbname = "d6hsqvpeb3dbtf"))
                 dbExecute(con(), paste0("UPDATE projects SET images = '",drive_link, "' WHERE projectname LIKE '",df$text,"%';" ))
               })
+              forward_image(df, from)
             }
             else if (grepl("^P[0-9]{4}.*$", df$text)) {
               drive_link <- get_WA_image_and_upload(df, "ProjectOrders", substr(df$text, 2,5))
@@ -967,4 +968,30 @@ get_active_projects <- function() {
     active_proj <- dbGetQuery(con(), paste0("SELECT projectid FROM projects WHERE status IN ('Not Started', 'In Progress');"))$projectid
   })
   projects <- get_projects(get_from_api("TimeTrackingProject","GetActiveProjects")) %>% filter(ID %in% active_proj)
+}
+
+forward_image <- function(df, from) {
+  pm <- tryCatch({
+    pm <- dbGetQuery(con(), paste0("SELECT wa_number FROM active_ts WHERE pm = 'true';"))$wa_number
+  }, 
+  error = function(e) {
+    con(dbConnect(RPostgres::Postgres(), user = "ucr5l5kv090pne", password = "p54f2fdf2a84201889d0c2eb6e634624192bea1f1a7a1abf423bcb5c7ad2a982c", host = "ec2-54-194-134-97.eu-west-1.compute.amazonaws.com", port = 5432, dbname = "d6hsqvpeb3dbtf"))
+    pm <- dbGetQuery(con(), paste0("SELECT wa_number FROM active_ts WHERE pm = 'true';"))$wa_number
+  })
+  md <- tryCatch({
+    md <- dbGetQuery(con(), paste0("SELECT wa_number FROM active_ts WHERE md = 'true';"))$wa_number
+  }, 
+  error = function(e) {
+    con(dbConnect(RPostgres::Postgres(), user = "ucr5l5kv090pne", password = "p54f2fdf2a84201889d0c2eb6e634624192bea1f1a7a1abf423bcb5c7ad2a982c", host = "ec2-54-194-134-97.eu-west-1.compute.amazonaws.com", port = 5432, dbname = "d6hsqvpeb3dbtf"))
+    md <- dbGetQuery(con(), paste0("SELECT wa_number FROM active_ts WHERE md = 'true';"))$wa_number
+  })
+  header <- list('type' = 'image', 'image' = list('id' = df$attachmentid))
+  browser()
+  projectName <- df$text
+  body <- list(
+    list('type' = 'text', 'text' = from),
+    list('type' = 'text', 'text' = projectName)
+  )
+  send_template(pm, body, "project_image_fwd", heading = header, project = projectName)
+  send_template(md, body, "project_image_fwd", heading = header ,project = projectName)
 }
