@@ -524,28 +524,32 @@ server <- function(input, output, session) {
   observeEvent(input$upload_files, {
     output$file_upload_error <- renderText({"Processing, please wait..."})
     if (input$approve_without_quotes) {
-      ac <- tryCatch({
-        ac <- dbGetQuery(con(), paste0("SELECT wa_number FROM active_ts WHERE ac = 'true';"))$wa_number
-      }, 
-      error = function(e) {
-        con(dbConnect(RPostgres::Postgres(), user = "ucr5l5kv090pne", password = "p54f2fdf2a84201889d0c2eb6e634624192bea1f1a7a1abf423bcb5c7ad2a982c", host = "ec2-54-194-134-97.eu-west-1.compute.amazonaws.com", port = 5432, dbname = "d6hsqvpeb3dbtf"))
-        ac <- dbGetQuery(con(), paste0("SELECT wa_number FROM active_ts WHERE ac = 'true';"))$wa_number
-      })
-      body <- list(
-        list("type" = "text", "text" = orders_selected_row()$project),
-        list("type" = "text", "text" = orders_selected_row()$id),
-        list("type" = "text", "text" = orders_selected_row()$itemdescription),
-        list("type" = "text", "text" = as.character(input$order_amount))
-      )
-      #KARLA Test this
-      send_template(ac, body_params = body, template_name = 'request_payemt_without_quote', project = orders_selected_row()$project, orderid = orders_selected_row()$id)
-      tryCatch({
-        dbExecute(con(), paste0("UPDATE orders SET status = 'Payment Requested', lastupdate = '",format(Sys.Date(), format = "%d-%m-%Y"),"' WHERE id = ",orders_selected_row()$id,";" ))
-      }, 
-      error = function(e) {
-        con(dbConnect(RPostgres::Postgres(), user = "ucr5l5kv090pne", password = "p54f2fdf2a84201889d0c2eb6e634624192bea1f1a7a1abf423bcb5c7ad2a982c", host = "ec2-54-194-134-97.eu-west-1.compute.amazonaws.com", port = 5432, dbname = "d6hsqvpeb3dbtf"))
-        dbExecute(con(), paste0("UPDATE orders SET status = 'Payment Requested', lastupdate = '",format(Sys.Date(), format = "%d-%m-%Y"),"' WHERE id = ",orders_selected_row()$id,";" ))
-      })
+      if (input$order_amount == 0) {
+        output$file_upload_error <- renderText({"Please enter an amount."})
+      } else {
+        ac <- tryCatch({
+          ac <- dbGetQuery(con(), paste0("SELECT wa_number FROM active_ts WHERE ac = 'true';"))$wa_number
+        }, 
+        error = function(e) {
+          con(dbConnect(RPostgres::Postgres(), user = "ucr5l5kv090pne", password = "p54f2fdf2a84201889d0c2eb6e634624192bea1f1a7a1abf423bcb5c7ad2a982c", host = "ec2-54-194-134-97.eu-west-1.compute.amazonaws.com", port = 5432, dbname = "d6hsqvpeb3dbtf"))
+          ac <- dbGetQuery(con(), paste0("SELECT wa_number FROM active_ts WHERE ac = 'true';"))$wa_number
+        })
+        body <- list(
+          list("type" = "text", "text" = orders_selected_row()$project),
+          list("type" = "text", "text" = orders_selected_row()$id),
+          list("type" = "text", "text" = orders_selected_row()$itemdescription),
+          list("type" = "text", "text" = as.character(input$order_amount))
+        )
+        #KARLA Test this
+        send_template(ac, body_params = body, template_name = 'request_payemt_without_quote', project = orders_selected_row()$project, orderid = orders_selected_row()$id)
+        tryCatch({
+          dbExecute(con(), paste0("UPDATE orders SET status = 'Payment Requested', lastupdate = '",format(Sys.Date(), format = "%d-%m-%Y"),"' WHERE id = ",orders_selected_row()$id,";" ))
+        }, 
+        error = function(e) {
+          con(dbConnect(RPostgres::Postgres(), user = "ucr5l5kv090pne", password = "p54f2fdf2a84201889d0c2eb6e634624192bea1f1a7a1abf423bcb5c7ad2a982c", host = "ec2-54-194-134-97.eu-west-1.compute.amazonaws.com", port = 5432, dbname = "d6hsqvpeb3dbtf"))
+          dbExecute(con(), paste0("UPDATE orders SET status = 'Payment Requested', lastupdate = '",format(Sys.Date(), format = "%d-%m-%Y"),"' WHERE id = ",orders_selected_row()$id,";" ))
+        })
+      }
     }
     else {
       if (nrow(input$quote_file) == 0) output$file_upload_error <- renderText({"No files were selected."})
@@ -625,7 +629,8 @@ server <- function(input, output, session) {
         orders_data(dbGetQuery(con(), paste0("SELECT * FROM orders WHERE status != 'Arrived';")) %>% arrange(desc(id)))
       })
     }
-        removeModal()
+    output$file_upload_error <- renderText({""})
+    removeModal()
   })
   
   observeEvent(input$addOrder, {

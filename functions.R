@@ -307,25 +307,33 @@ get_WA_image_and_upload <- function(df, folder_name, project_name) {
     
     response2 <- GET(image_url, add_headers(Authorization = paste("Bearer", wa_token)),
                      user_agent("Mozilla/5.0"))
-    
+    filename <- paste0(
+      substr(df$text,7,nchar(df$text)),
+      "_",
+      paste0(sample(c(0:9, letters, LETTERS), 5, replace = TRUE), collapse = ""),
+      ".jpg"
+    )
     # Check if the request was successful (status code 200)
     if (response2$status_code == 200) {
-      uploadToGoogleDrive(response2$content, project_name, folder_name)
+      uploadToGoogleDrive(response2$content, project_name, folder_name, filename)
     }
   } 
 }
 
-uploadToGoogleDrive <- function(image_binary, project_name, folder_name) {
+uploadToGoogleDrive <- function(image_binary, project_name, folder_name, filename = NULL) {
   drive_auth(path = google_drive_service_acc)
   temp_image <- tempfile(fileext = ".jpg")
   writeBin(image_binary, temp_image)
   path <- paste0(folder_name,"/",project_name,"/")
-  filename <- paste0(
-    format(Sys.Date(), format = "%d_%m_%Y"),
-    "_",
-    paste0(sample(c(0:9, letters, LETTERS), 5, replace = TRUE), collapse = ""),
-    ".jpg"
-  )
+  if (is.null(filename)) {
+    filename <- paste0(
+      format(Sys.Date(), format = "%d_%m_%Y"),
+      "_",
+      paste0(sample(c(0:9, letters, LETTERS), 5, replace = TRUE), collapse = ""),
+      ".jpg"
+    )
+  }
+  
   try(path <- drive_mkdir(project_name, path = paste0(folder_name,"/"), overwrite = FALSE))
   # Create a new file in the specified folder
   drive_upload(temp_image, 
@@ -601,10 +609,10 @@ handle_wa_button <- function(button_details, invoiceName=NULL) {
           dbExecute(con(), paste0("UPDATE orders SET status = 'Paid', lastupdate = '",format(Sys.Date(), format = "%d-%m-%Y"),"' WHERE id = ", orderid, ";"))
         })
       }
-    } else send_template(rec_webhook$from, template_name = "unknown_request")
+    } else send_template(button_details$from, template_name = "unknown_request")
   }
   
-  if (!is.na(button_details$text)) {
+  else if (!is.na(button_details$text)) {
     
     if (button_details$text == "Task Completed") {
       tryCatch({
@@ -828,8 +836,8 @@ handle_wa_button <- function(button_details, invoiceName=NULL) {
           dbExecute(con, paste0("UPDATE projects SET status = 'Invoiced', lastupdate = '",format(Sys.Date(), format = "%d-%m-%Y"),
                                 "' WHERE projectname = '", sent_WA$project, "';"))        })
       }
-    } else send_template(rec_webhook$from, template_name = "unknown_request")
-  } else send_template(rec_webhook$from, template_name = "unknown_request")
+    } else send_template(button_details$from, template_name = "unknown_request")
+  } else send_template(button_details$from, template_name = "unknown_request")
 }
 
 get_WA_number <- function(number) {
