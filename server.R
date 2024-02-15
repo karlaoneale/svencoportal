@@ -774,6 +774,7 @@ server <- function(input, output, session) {
         })
         proj_id <- (projects() %>% filter(Name == input$proj_plan))$ID
         tasks <- filter(tasks(), grepl(paste0("\\b", proj_id, "\\b"), ProjectID))$Name
+        removeModal()
         shiny::modalDialog(
           title = "Add Task to Project",
           column(width = 8,
@@ -897,7 +898,7 @@ server <- function(input, output, session) {
           plannedcompletion = paste(format(input$task_dates[2], format = "%Y-%m-%d"), format(input$task_end_time, format = "%H:%M:%S")),
           colour = task_colors[input$task_name]
         )
-        print(paste0("Add Task: \n", new_item))
+        print(paste0("Add Task: ", nrow(new_item), ": ", paste(new_item, collapse = " | ")))
         tryCatch({
           dbExecute(con(), paste0("INSERT INTO tasks ( projectname, taskname, description, status, employee, plannedstart, plannedcompletion, colour) VALUES ('",new_item$projectname,
                                   "','", new_item$taskname, "', '", new_item$description,"', '", new_item$status, "', '", 
