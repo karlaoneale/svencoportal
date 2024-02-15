@@ -897,6 +897,7 @@ server <- function(input, output, session) {
           plannedcompletion = paste(format(input$task_dates[2], format = "%Y-%m-%d"), format(input$task_end_time, format = "%H:%M:%S")),
           colour = task_colors[input$task_name]
         )
+        print(paste0("Add Task: \n", new_item))
         tryCatch({
           dbExecute(con(), paste0("INSERT INTO tasks ( projectname, taskname, description, status, employee, plannedstart, plannedcompletion, colour) VALUES ('",new_item$projectname,
                                   "','", new_item$taskname, "', '", new_item$description,"', '", new_item$status, "', '", 

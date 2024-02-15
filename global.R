@@ -39,5 +39,5 @@ wa_from <- "206349329226876"
 wa_token <- "EAAKmZBY3Xyi8BOx6HahZB7iZBpt0qfJkuiw1qlBxHIZC3MhoOcJccm18MUkZCZBkmS4e3L9pebKnC3yo8AObdbR8bcTnMcAV25Qm4So4ZBjKniP1cleecnTcZBl9U9ieL0GmGPKrMpdL3GywzKAm90REBILRPGGS7kqsaJluSZARIZBu7jHoL61BvoZA1okSr6ocMly"
 
 task_ids <- c("Fitting & Assembly" = "100989","Machining" = "93868","Other" = "94121","Welding & Fabrication" = "93864", "Breakfast Break" = "94538", "Cleaning" = "94538", "Driving Duty" = "93869", "HOD Meeting" = "145048", "Workshop Maintenance" = "116519")
-task_colors <- c("Fitting & Assembly" = "#118ab2","Machining" = "#06d6a0","Other" = "#ffd166","Welding & Fabrication" = "#ef476f")
+task_colors <- c("Fitting & Assembly" = "#118ab2","Machining" = "#06d6a0","Other" = "#ffd166","Welding & Fabrication" = "#ef476f", "Breakfast Break" = "#ff6b6b", "Cleaning" = "#7209b7", "Driving Duty" = "#ff9f1c", "HOD Meeting" = "#6a0572", "Workshop Maintenance" = "#118ab2")
 progress_icons <- c("Not Started" = "circle", "In Progress" = "circle-half-stroke", "Completed" = "circle")
