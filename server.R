@@ -37,14 +37,14 @@ server <- function(input, output, session) {
     projects(get_projects(get_from_api("TimeTrackingProject","GetActiveProjects")))
     missing_rows <- projects()[!(projects()$ID %in% proj_sheet$projectid), ]
     inactive <- proj_sheet[!(proj_sheet$projectid %in% projects()$ID),]$projectid
-    inactive_values <- paste("'", inactive, "'", collapse = ", ")
+    inactive_values <- paste0(inactive, collapse = ", ")
     if (length(inactive) > 0) {
       tryCatch({
-        dbExecute(con(), "UPDATE projects SET active = FALSE WHERE projectid IN (", inactive_values, ")")
+        dbExecute(con(), paste("UPDATE projects SET active = FALSE WHERE projectid IN (", inactive_values, ")"))
       }, 
       error = function(e) {
         con(dbConnect(RPostgres::Postgres(), user = "ucr5l5kv090pne", password = "p54f2fdf2a84201889d0c2eb6e634624192bea1f1a7a1abf423bcb5c7ad2a982c", host = "ec2-54-194-134-97.eu-west-1.compute.amazonaws.com", port = 5432, dbname = "d6hsqvpeb3dbtf"))
-        dbExecute(con(), "UPDATE projects SET active = FALSE WHERE projectid IN (", inactive_values, ")")
+        dbExecute(con(), paste("UPDATE projects SET active = FALSE WHERE projectid IN (", inactive_values, ")"))
       })
     }
     if (nrow(missing_rows)>0) {
@@ -886,9 +886,9 @@ server <- function(input, output, session) {
       })
       
       observeEvent(input$addTaskProj, {
-        new_id <- paste(nrow(tasks_sheet()) + 1)
+        latest_id <- max(tasks_sheet()$taskid)
+        latest_task <- tasks_sheet()[tasks_sheet()$taskid == latest_id, -which(names(tasks_sheet()) == 'taskid')]
         new_item <- data.frame(
-          taskid = new_id,
           projectname = input$proj_plan,
           taskname = input$task_name,
           description = input$task_description,
@@ -898,28 +898,32 @@ server <- function(input, output, session) {
           plannedcompletion = paste(format(input$task_dates[2], format = "%Y-%m-%d"), format(input$task_end_time, format = "%H:%M:%S")),
           colour = task_colors[input$task_name]
         )
-        print(paste0("Add Task: ", nrow(new_item), ": ", paste(new_item, collapse = " | ")))
-        tryCatch({
-          dbExecute(con(), paste0("INSERT INTO tasks ( projectname, taskname, description, status, employee, plannedstart, plannedcompletion, colour) VALUES ('",new_item$projectname,
-                                  "','", new_item$taskname, "', '", new_item$description,"', '", new_item$status, "', '", 
-                                  new_item$employee,  "', '", new_item$plannedstart, "', '", 
-                                  new_item$plannedcompletion, "', '", new_item$colour, "');"))
-        }, 
-        error = function(e) {
-          con(dbConnect(RPostgres::Postgres(), user = "ucr5l5kv090pne", password = "p54f2fdf2a84201889d0c2eb6e634624192bea1f1a7a1abf423bcb5c7ad2a982c", host = "ec2-54-194-134-97.eu-west-1.compute.amazonaws.com", port = 5432, dbname = "d6hsqvpeb3dbtf"))
-          dbExecute(con(), paste0("INSERT INTO tasks ( projectname, taskname, description, status, employee, plannedstart, plannedcompletion, colour) VALUES ('",new_item$projectname,
-                                  "','", new_item$taskname, "', '", new_item$description,"', '", new_item$status, "', '", 
-                                  new_item$employee,  "', '", new_item$plannedstart, "', '", 
-                                  new_item$plannedcompletion, "', '", new_item$colour, "');"))
-        })
-        tryCatch({
-          tasks_sheet(dbGetQuery(con(), "SELECT * FROM tasks"))
-        }, 
-        error = function(e) {
-          con(dbConnect(RPostgres::Postgres(), user = "ucr5l5kv090pne", password = "p54f2fdf2a84201889d0c2eb6e634624192bea1f1a7a1abf423bcb5c7ad2a982c", host = "ec2-54-194-134-97.eu-west-1.compute.amazonaws.com", port = 5432, dbname = "d6hsqvpeb3dbtf"))
-          tasks_sheet(dbGetQuery(con(), "SELECT * FROM tasks"))
-        })
-        proj_timevis_data(updateProjTimevis(tasks_sheet() %>% filter(projectname == input$proj_plan)))
+        rownames(new_item) <- NULL
+        rownames(latest_task) <- NULL
+        if (!identical(latest_task, new_item)) {
+          print(paste0("Add Task: ", nrow(new_item), ": ", paste(new_item, collapse = " | ")))
+          tryCatch({
+            dbExecute(con(), paste0("INSERT INTO tasks ( projectname, taskname, description, status, employee, plannedstart, plannedcompletion, colour) VALUES ('",new_item$projectname,
+                                    "','", new_item$taskname, "', '", new_item$description,"', '", new_item$status, "', '", 
+                                    new_item$employee,  "', '", new_item$plannedstart, "', '", 
+                                    new_item$plannedcompletion, "', '", new_item$colour, "');"))
+          }, 
+          error = function(e) {
+            con(dbConnect(RPostgres::Postgres(), user = "ucr5l5kv090pne", password = "p54f2fdf2a84201889d0c2eb6e634624192bea1f1a7a1abf423bcb5c7ad2a982c", host = "ec2-54-194-134-97.eu-west-1.compute.amazonaws.com", port = 5432, dbname = "d6hsqvpeb3dbtf"))
+            dbExecute(con(), paste0("INSERT INTO tasks ( projectname, taskname, description, status, employee, plannedstart, plannedcompletion, colour) VALUES ('",new_item$projectname,
+                                    "','", new_item$taskname, "', '", new_item$description,"', '", new_item$status, "', '", 
+                                    new_item$employee,  "', '", new_item$plannedstart, "', '", 
+                                    new_item$plannedcompletion, "', '", new_item$colour, "');"))
+          })
+          tryCatch({
+            tasks_sheet(dbGetQuery(con(), "SELECT * FROM tasks"))
+          }, 
+          error = function(e) {
+            con(dbConnect(RPostgres::Postgres(), user = "ucr5l5kv090pne", password = "p54f2fdf2a84201889d0c2eb6e634624192bea1f1a7a1abf423bcb5c7ad2a982c", host = "ec2-54-194-134-97.eu-west-1.compute.amazonaws.com", port = 5432, dbname = "d6hsqvpeb3dbtf"))
+            tasks_sheet(dbGetQuery(con(), "SELECT * FROM tasks"))
+          })
+          proj_timevis_data(updateProjTimevis(tasks_sheet() %>% filter(projectname == input$proj_plan))) 
+        }
         shiny::removeModal()
       })
       
