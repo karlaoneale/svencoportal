@@ -114,8 +114,18 @@ send_template <- function(wa_id, body_params = NULL, template_name, heading = NU
   url <- paste0(wa_api_url,wa_from,"/messages")
   b <- ""
   h <- ""
-  if (!is.null(heading)) h <- list("type" = "header","parameters" = list(heading))
-  if (!is.null(body_params)) b <- list("type" = "body","parameters" = body_params)
+  if (!is.null(heading)) {
+    heading <- lapply(heading, function(x) {
+      ifelse(is.null(x) || x == "" || is.na(x), " ", x)
+    })
+    h <- list("type" = "header","parameters" = list(heading))
+  }
+  if (!is.null(body_params)) {
+    body_params <- lapply(body_params, function(x) {
+      ifelse(is.null(x) || x == "" || is.na(x), " ", x)
+    })
+    b <- list("type" = "body","parameters" = body_params)
+  }
   
   body <- list(
     "messaging_product" = "whatsapp",
@@ -221,7 +231,7 @@ get_new_webhooks <- function() {
               "fromid" = rec_webhook$from,
               "timestamp" = rec_webhook$timestamp,
               "type" = type,
-              "text" = rec_webhook$text$body,
+              "text" = gsub("\n", " ", rec_webhook$text$body),
               "attachmentid" = NA
             )
             if (grepl("^N[0-9]{4}.*$", df$text)) { 
@@ -241,7 +251,7 @@ get_new_webhooks <- function() {
               "fromid" = rec_webhook$from,
               "timestamp" = rec_webhook$timestamp,
               "type" = type,
-              "text" = ifelse (is.null(rec_webhook$image$caption),NA, rec_webhook$image$caption),
+              "text" = ifelse (is.null(rec_webhook$image$caption),NA, gsub("\n", " ", rec_webhook$image$caption)),
               "attachmentid" = rec_webhook$image$id
             )
             if (grepl("^[0-9]{4}$", df$text)) {
@@ -268,10 +278,13 @@ get_new_webhooks <- function() {
               "fromid" = rec_webhook$from,
               "timestamp" = rec_webhook$timestamp,
               "type" = type,
-              "text" = ifelse(is.null(rec_webhook$document$caption),NA, rec_webhook$document$caption),
+              "text" = ifelse(is.null(rec_webhook$document$caption),NA, gsub("\n", " ", rec_webhook$document$caption)),
               "attachmentid" = rec_webhook$document$id
             )
             handle_wa_button(df)
+          }
+          else {
+            send_template(rec_webhook$from, template_name = "unknown_request")
           }
           received_df <- bind_rows(received_df, df)
         }

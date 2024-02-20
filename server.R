@@ -486,6 +486,29 @@ server <- function(input, output, session) {
                                 format(Sys.Date(), format = "%d-%m-%Y"), "', courier = '",
                                 input$order_courier, "', eta = '", format(input$order_eta[1], format = "%d-%m-%Y"),
                                 "' WHERE id = ", orders_selected_row()$id, ";"))      })
+      wa_id <- tryCatch({
+        wa_id <- dbGetQuery(con(), paste0("SELECT wa_number FROM active_ts WHERE name = '",orders_selected_row()$submittedby,"';"))$wa_number
+      }, 
+      error = function(e) {
+        con(dbConnect(RPostgres::Postgres(), user = "ucr5l5kv090pne", password = "p54f2fdf2a84201889d0c2eb6e634624192bea1f1a7a1abf423bcb5c7ad2a982c", host = "ec2-54-194-134-97.eu-west-1.compute.amazonaws.com", port = 5432, dbname = "d6hsqvpeb3dbtf"))
+        wa_id <- dbGetQuery(con(), paste0("SELECT wa_number FROM active_ts WHERE name = '",orders_selected_row()$submittedby,"';"))$wa_number
+      })
+      body_params <- list(
+        list('type' = 'text', 'text' = orders_selected_row()$id),
+        list('type' = 'text', 'text' = orders_selected_row()$itemdescription),
+        list('type' = 'text', 'text' = format(input$order_eta[1], format = "%d %b"))
+      )
+      send_template(wa_id, body_params = body_params, template_name = 'ordered', project = orders_selected_row()$project, orderid = orders_selected_row()$id)
+      pm <- tryCatch({
+        pm <- dbGetQuery(con(), paste0("SELECT wa_number FROM active_ts WHERE pm = 'true';"))$wa_number
+      }, 
+      error = function(e) {
+        con(dbConnect(RPostgres::Postgres(), user = "ucr5l5kv090pne", password = "p54f2fdf2a84201889d0c2eb6e634624192bea1f1a7a1abf423bcb5c7ad2a982c", host = "ec2-54-194-134-97.eu-west-1.compute.amazonaws.com", port = 5432, dbname = "d6hsqvpeb3dbtf"))
+        pm <- dbGetQuery(con(), paste0("SELECT wa_number FROM active_ts WHERE pm = 'true';"))$wa_number
+      })
+      if (pm != wa_id) send_template(pm, body_params = body_params, template_name = 'ordered', project = orders_selected_row()$project, orderid = orders_selected_row()$id)
+      
+      
     }
     else {
       tryCatch({
