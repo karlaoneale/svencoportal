@@ -116,7 +116,7 @@ send_template <- function(wa_id, body_params = NULL, template_name, heading = NU
   h <- ""
   if (!is.null(heading)) {
     heading <- lapply(heading, function(x) {
-      ifelse(is.null(x) || x == "" || is.na(x), " ", x)
+      ifelse(is.null(x$text) || x$text == "" || is.na(x$text), " ", x$text)
     })
     h <- list("type" = "header","parameters" = list(heading))
   }
