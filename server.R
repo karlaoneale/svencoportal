@@ -578,8 +578,8 @@ server <- function(input, output, session) {
       if (nrow(input$quote_file) == 0) output$file_upload_error <- renderText({"No files were selected."})
       else {
         drive_auth(path = google_drive_service_acc)
-        # path <- paste0("ProjectQuotes/",substr(orders_selected_row()$project, 1,4),"/")
-        try(path <- drive_mkdir(substr(orders_selected_row()$id), path = "ProjectQuotes/", overwrite = FALSE))
+        path <- paste0("ProjectQuotes/",orders_selected_row()$id,"/")
+        try(path <- drive_mkdir(orders_selected_row()$id, path = "ProjectQuotes/", overwrite = FALSE))
         for (i in 1:nrow(input$quote_file)) {
           row <- input$quote_file[i, ]
           drive_upload(row$datapath, 
