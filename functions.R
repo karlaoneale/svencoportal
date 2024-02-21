@@ -123,12 +123,12 @@ send_template <- function(wa_id, body_params = NULL, template_name, heading = NU
     h <- list("type" = "header","parameters" = list(heading))
   }
   if (!is.null(body_params)) {
-    body_params <- lapply(body_params, function(x) {
-      ifelse(is.null(x$text) || x$text == "" || is.na(x$text), " ", x$text)
-    })
+    for (i in 1:length(body_params)) {
+      body_params[[i]]$text <- ifelse(is.null(body_params[[i]]$text) || body_params[[i]]$text == "" || is.na(body_params[[i]]$text), " ", body_params[[i]]$text)
+      print("here")
+    }
     b <- list("type" = "body","parameters" = body_params)
   }
-  
   body <- list(
     "messaging_product" = "whatsapp",
     "to" = wa_id,
@@ -324,7 +324,7 @@ get_WA_image_and_upload <- function(df, folder_name, project_name) {
     response2 <- GET(image_url, add_headers(Authorization = paste("Bearer", wa_token)),
                      user_agent("Mozilla/5.0"))
     filename <- paste0(
-      substr(df$text,7,nchar(df$text)),
+      trimws(substr(df$text,7,nchar(df$text)), "left"),
       "_",
       paste0(sample(c(0:9, letters, LETTERS), 5, replace = TRUE), collapse = ""),
       ".jpg"
@@ -367,7 +367,7 @@ uploadToGoogleDrive <- function(image_binary, project_name, folder_name, filenam
 
 create_order <- function(message_details, drive_link = NULL) {
   projNumber <- substr(message_details$text, 2, 5)
-  itemDescription <- substr(message_details$text, 7, nchar(message_details$text))
+  itemDescription <- trimws(substr(message_details$text, 7, nchar(message_details$text)), "left") 
   from <- tryCatch({
     from <- (dbGetQuery(con(), paste0("SELECT name FROM active_ts WHERE wa_number = '",message_details$from,"';"))$name)[1]
   }, 
@@ -445,7 +445,7 @@ create_order <- function(message_details, drive_link = NULL) {
 
 add_note <- function(df) {
   projNumber <- substr(df$text, 2, 5)
-  note <- substr(df$text, 7, nchar(df$text))
+  note <- trimws(substr(df$text, 7, nchar(df$text)), "left") 
   from <- tryCatch({
     from <- (dbGetQuery(con(), paste0("SELECT name FROM active_ts WHERE wa_number = '",df$from,"';"))$name)[1]
   }, 
