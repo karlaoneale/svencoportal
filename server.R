@@ -74,8 +74,8 @@ server <- function(input, output, session) {
   observeEvent(input$update_proj_status, {
     if (length(input$project_admin_table_rows_selected)==0) show_alert("No project was selected.")
     else {
-      if (length(input$project_admin_table_rows_selected)==1) choices <- c("Not Started", "In Progress", "Ready for QC", "To be Invoiced", "Invoiced","Cancelled")
-      else choices <- c("Not Started", "In Progress", "Ready for QC", "To be Invoiced","Cancelled")
+      if (length(input$project_admin_table_rows_selected)==1) choices <- c("Not Started", "In Progress", "Ready for QC", "To be Invoiced", "Invoiced","No Charge","Cancelled")
+      else choices <- c("Not Started", "In Progress", "Ready for QC", "To be Invoiced","No Charge","Cancelled")
       modalDialog(
         title = "Update the Status of Selected Projects",
         div(
