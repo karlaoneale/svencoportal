@@ -62,7 +62,8 @@ server <- function(input, output, session) {
       )
       dbWriteTable(con(), "projects", add, append = TRUE, overwrite = FALSE)
     }
-    proj_admin_table(proj_sheet %>% arrange(desc(projectname)))
+    if (input$show_only_incomplete_projects) proj_admin_table(proj_sheet %>% filter(status %in% c("Not Started", "In Progress", "Ready for QC", "To be Invoiced")) %>% arrange(desc(projectname)))
+    else proj_admin_table(proj_sheet %>% arrange(desc(projectname)))
     datatable(proj_admin_table() %>%
                 select(-projectid) %>%
                 mutate(images = ifelse(images != "", paste0("<a href='", images,"' target='_blank'>View</a>"), images),

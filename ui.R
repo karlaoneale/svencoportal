@@ -109,11 +109,13 @@ dashboardPage(
           actionButton(inputId = "refreshProjAdmin", label = "",icon = icon("rotate-right"), class = "back"),
           actionButton(inputId = "projAdminHelp", label = "",icon = icon("question"), class = "back", 
                        onclick = "window.open('https://docs.google.com/document/d/1UjW5uidLSUVQG1h-7FpYQITXSfGcpn3wW9WZ5QKbMvU/edit?usp=sharing', '_blank')"),
+          
           actionButton(inputId = "update_proj_status", label = "Update Status", icon = icon("bars-progress"), class = "add_proj")
         ),
         box(
           title = "Project Administration", 
           width = NULL,
+          checkboxInput("show_only_incomplete_projects", "Show only projects that still requires action", TRUE),
           DTOutput("project_admin_table")
         )
       ),
