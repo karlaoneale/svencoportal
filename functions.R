@@ -825,7 +825,8 @@ handle_wa_button <- function(button_details, invoiceName=NULL) {
           invoiceID <- invoice_data$Results$ID
           if (is.null(invoice_data$Results$Customer$Mobile) || invoice_data$Results$Customer$Mobile == "") {
             body_params <- list(
-              list('type' = 'text', 'text' = sent_WA$invoicename)
+              list('type' = 'text', 'text' = sent_WA$invoicename),
+              list('type' = 'text', 'text' = "The customer's mobile number is missing.")
             )
             send_template(admin, template_name = "invoice_failed", project = sent_WA$project, body_params = body_params, invoicename = sent_WA$invoicename)
           } else {
@@ -836,11 +837,14 @@ handle_wa_button <- function(button_details, invoiceName=NULL) {
             success <- send_template(customerMobile, body_params, "invoice", header, project=sent_WA$project, invoicename = sent_WA$invoicename)
             if (success) send_template(admin, body_params = body_params, template_name = "invoice_success", project = sent_WA$project, invoicename = sent_WA$invoicename)
             else {
+              body_params <- list(list('type' = 'text', 'text' = customerName),
+                                  list('type' = 'text', 'text' = "An error occurred while trying to send the invoice to the customer."))
               send_template(admin, template_name = "invoice_failed", project = sent_WA$project, body_params = body_params, invoicename = sent_WA$invoicename)
             }
           }
         } else {
-          body_params <- list(list('type' = 'text', 'text' = sent_WA$invoicename))
+          body_params <- list(list('type' = 'text', 'text' = sent_WA$invoicename),
+                              list('type' = 'text', 'text' = "Unable to find the invoice on Sage."))
           send_template(admin, body_params = body_params, template_name = "invoice_failed", project = sent_WA$project, body_params = body_params, invoicename = sent_WA$invoicename)
         }
         tryCatch({
@@ -913,9 +917,8 @@ send_invoice_to_PM <- function(message_details) {
       })
       send_template(pm, body_params, "invoice_approval", heading = header, project = projectName, docid = docID, invoicename = message_details$text)
     }} else {
-      body_params <- list(
-        list('type' = 'text', 'text' = "we were unable to retrieve the invoice details")
-      )
+      body_params <- list(list('type' = 'text', 'text' = message_details$text),
+                          list('type' = 'text', 'text' = "Unable to find the invoice on Sage."))
       admin <- tryCatch({
         admin <- dbGetQuery(con(), paste0("SELECT wa_number FROM active_ts WHERE ai = 'true';"))$wa_number
       }, 
