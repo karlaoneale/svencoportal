@@ -125,7 +125,6 @@ send_template <- function(wa_id, body_params = NULL, template_name, heading = NU
   if (!is.null(body_params)) {
     for (i in 1:length(body_params)) {
       body_params[[i]]$text <- ifelse(is.null(body_params[[i]]$text) || body_params[[i]]$text == "" || is.na(body_params[[i]]$text), " ", body_params[[i]]$text)
-      print("here")
     }
     b <- list("type" = "body","parameters" = body_params)
   }
@@ -845,11 +844,11 @@ handle_wa_button <- function(button_details, invoiceName=NULL) {
           send_template(admin, body_params = body_params, template_name = "invoice_failed", project = sent_WA$project, body_params = body_params, invoicename = sent_WA$invoicename)
         }
         tryCatch({
-          dbExecute(con, paste0("UPDATE projects SET status = 'Invoiced', lastupdate = '",format(Sys.Date(), format = "%d-%m-%Y"),
+          dbExecute(con(), paste0("UPDATE projects SET status = 'Invoiced', lastupdate = '",format(Sys.Date(), format = "%d-%m-%Y"),
                                 "' WHERE projectname = '", sent_WA$project, "';"))        }, 
         error = function(e) {
           con(dbConnect(RPostgres::Postgres(), user = "ucr5l5kv090pne", password = "p54f2fdf2a84201889d0c2eb6e634624192bea1f1a7a1abf423bcb5c7ad2a982c", host = "ec2-54-194-134-97.eu-west-1.compute.amazonaws.com", port = 5432, dbname = "d6hsqvpeb3dbtf"))
-          dbExecute(con, paste0("UPDATE projects SET status = 'Invoiced', lastupdate = '",format(Sys.Date(), format = "%d-%m-%Y"),
+          dbExecute(con(), paste0("UPDATE projects SET status = 'Invoiced', lastupdate = '",format(Sys.Date(), format = "%d-%m-%Y"),
                                 "' WHERE projectname = '", sent_WA$project, "';"))        })
       }
     } else send_template(button_details$from, template_name = "unknown_request")
