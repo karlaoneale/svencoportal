@@ -790,6 +790,7 @@ server <- function(input, output, session) {
   observeEvent(input$dismiss_modal, {
     removeModal()
   })
+  tasks <- reactiveVal(get_tasks(get_from_api("TimeTrackingTask","Get","$filter=Active eq true&includeProjectTasks=True&")))
   
   
   # Project Management -----
@@ -805,11 +806,11 @@ server <- function(input, output, session) {
         tasks_sheet(dbGetQuery(con(), "SELECT * FROM tasks"))
       })
       proj_timevis_data <- reactiveVal(data.frame())
-      tasks <- reactiveVal(get_tasks(get_from_api("TimeTrackingTask","Get","$filter=Active eq true&includeProjectTasks=True&")))
       filtered_projects <- projects()
       
       choices_display <- paste0(filtered_projects$Name, " (", filtered_projects$Customer, ")")
-      named_vector <- setNames(filtered_projects$Name, choices_display)
+      named_vector <- setNames(filtered_projects$Name, choices_display) %>%
+        sort(decreasing = TRUE)
       updateSelectizeInput(session, "proj_plan", label = NULL, choices = c("Select Project", named_vector))
       
       observe({
@@ -967,7 +968,7 @@ server <- function(input, output, session) {
         if (!identical(latest_task, new_item)) {
           print(paste0("Add Task: ", nrow(new_item), ": ", paste(new_item, collapse = " | ")))
           tryCatch({
-            dbExecute(con(), paste0("INSERT INTO tasks ( projectname, taskname, description, status, employee, plannedstart, plannedcompletion, colour) VALUES ('",new_item$projectname,
+            dbExecute(con(), paste0("INSERT INTO tasks (taskid, projectname, taskname, description, status, employee, plannedstart, plannedcompletion, colour) VALUES (",latest_id+1,",'",new_item$projectname,
                                     "','", new_item$taskname, "', '", new_item$description,"', '", new_item$status, "', '", 
                                     new_item$employee,  "', '", new_item$plannedstart, "', '", 
                                     new_item$plannedcompletion, "', '", new_item$colour, "');"))
@@ -975,7 +976,7 @@ server <- function(input, output, session) {
           error = function(e) {
             dbDisconnect(isolate(con())) 
             con(dbConnect(RPostgres::Postgres(), user = "u2tnmv2ufe7rpk", password = "p899046d336be15351280fd542015420a8e18e22dfe07c1cccaaa8e0e9fb20631", host = "cdgn4ufq38ipd0.cluster-czz5s0kz4scl.eu-west-1.rds.amazonaws.com", port = 5432, dbname = "d6qh1puq26hrth"))
-            dbExecute(con(), paste0("INSERT INTO tasks ( projectname, taskname, description, status, employee, plannedstart, plannedcompletion, colour) VALUES ('",new_item$projectname,
+            dbExecute(con(), paste0("INSERT INTO tasks (taskid, projectname, taskname, description, status, employee, plannedstart, plannedcompletion, colour) VALUES (",latest_id+1,",'",new_item$projectname,
                                     "','", new_item$taskname, "', '", new_item$description,"', '", new_item$status, "', '", 
                                     new_item$employee,  "', '", new_item$plannedstart, "', '", 
                                     new_item$plannedcompletion, "', '", new_item$colour, "');"))
@@ -1232,7 +1233,6 @@ server <- function(input, output, session) {
     if (input$tl_ov_employees != "All") df <- df %>% filter(employee == input$tl_ov_employees)
     if (input$tl_ov_project != "All") df <- df %>% filter(projectname == input$tl_ov_project)
     if (input$tl_ov_task != "All") df <- df %>% filter(taskname == input$tl_ov_task)
-    
     groups <- data.frame(
       id = unique(df$employee),
       content = unique(df$employee)
@@ -1250,6 +1250,220 @@ server <- function(input, output, session) {
     
     timevis(data = timevis_data, groups = groups) %>%
       setWindow(paste(input$tl_ov_dates[1],"07:00") , paste(input$tl_ov_dates[2],"16:00"))
+  })
+  
+  observeEvent(input$overviewTimeVis_selected, {
+    selected_task <- tryCatch({
+      selected_task <- dbGetQuery(isolate(con()), paste0("SELECT * FROM tasks WHERE taskid = ", input$overviewTimeVis_selected, ";"))
+    }, 
+    error = function(e) {
+      dbDisconnect(isolate(con())) 
+      con(dbConnect(RPostgres::Postgres(), user = "u2tnmv2ufe7rpk", password = "p899046d336be15351280fd542015420a8e18e22dfe07c1cccaaa8e0e9fb20631", host = "cdgn4ufq38ipd0.cluster-czz5s0kz4scl.eu-west-1.rds.amazonaws.com", port = 5432, dbname = "d6qh1puq26hrth"))
+      selected_task <- dbGetQuery(isolate(con()), paste0("SELECT * FROM tasks WHERE taskid = ", input$overviewTimeVis_selected, ";"))
+    })
+    enabled_users <- tryCatch({
+      enabled_users <- dbGetQuery(isolate(con()), paste0("SELECT name FROM active_ts;"))$name
+    }, 
+    error = function(e) {
+      dbDisconnect(isolate(con())) 
+      con(dbConnect(RPostgres::Postgres(), user = "u2tnmv2ufe7rpk", password = "p899046d336be15351280fd542015420a8e18e22dfe07c1cccaaa8e0e9fb20631", host = "cdgn4ufq38ipd0.cluster-czz5s0kz4scl.eu-west-1.rds.amazonaws.com", port = 5432, dbname = "d6qh1puq26hrth"))
+      enabled_users <- dbGetQuery(isolate(con()), paste0("SELECT name FROM active_ts;"))$name
+    })
+    proj_id <- (isolate(projects()) %>% filter(Name == selected_task$projectname))$ID
+    tasks <- filter(isolate(tasks()), grepl(paste0("\\b", proj_id, "\\b"), ProjectID))$Name
+    shiny::modalDialog(
+      title = "Edit Task",
+      column(
+        width = 6,
+        div(
+          style = "display: inline-block;",
+          shiny::selectizeInput(
+            inputId = "edit_task_name_o",
+            label = "Task:",
+            choices = tasks,
+            selected = selected_task$taskname,
+            width = "270px"
+          )
+        ),
+        div(
+          style = "display: inline-block;",
+          shiny::textInput(
+            inputId = "edit_task_description_o",
+            label = "Description:",
+            value = selected_task$description,
+            width = "270px"
+          )
+        ),
+        div(
+          style = "display: inline-block;",
+          selectizeInput(
+            "edit_task_empl_o",
+            "Alocate Employee:",
+            choices = c("None", enabled_users),
+            selected = selected_task$employee,
+            width = "270px"
+          )
+        )
+      ),
+      column(
+        width = 6,
+        div(
+          style = "display: inline-block;",
+          daterangepicker(
+            "edit_task_dates_o",
+            "Planned Dates: ",
+            start = as.POSIXct(selected_task$plannedstart),
+            end = as.POSIXct(selected_task$plannedcompletion),
+            style = "border:1px solid lightgrey; height:32px; width:270px; text-align: center;"
+          )
+        ),
+        div(
+          style = "display: inline-block;",
+          airDatepickerInput(
+            "edit_task_start_time_o",
+            "Planned Start Time: ",
+            timepicker = TRUE,
+            timepickerOpts = timepickerOptions(
+              minHours = 6,
+              maxHours = 18,
+              minutesStep = 10
+            ),
+            onlyTimepicker = TRUE,
+            inline = TRUE,
+            value = as.POSIXct(selected_task$plannedstart),
+            width = "270px"
+          )
+        ),
+        div(
+          style = "display: inline-block;",
+          airDatepickerInput(
+            "edit_task_end_time_o",
+            "Planned End Time: ",
+            timepicker = TRUE,
+            timepickerOpts = timepickerOptions(
+              minHours = 6,
+              maxHours = 18,
+              minutesStep = 10
+            ),
+            onlyTimepicker = TRUE,
+            inline = TRUE,
+            value = as.POSIXct(selected_task$plannedcompletion),
+            width = "270px"
+          )
+        )
+      ),
+      div(
+        style = "display: inline-block;",
+        radioGroupButtons(
+          "edit_task_status_o",
+          "Status:",
+          choiceValues = c("Not Started", "In Progress", "Completed", "QC Passed"), 
+          choiceNames = c("Not Started", "In Progress", "Completed", "QC Passed"),
+          selected = selected_task$status,
+          justified = TRUE, 
+          width = "540px"
+        ),
+        tags$style(HTML("
+                    .btn-group input[type='radio'][value='Not Started'] { background-color: red; }
+                    .btn-group input[type='radio'][value='In Progress'] { background-color: blue; }
+                    .btn-group input[type='radio'][value='Completed'] { background-color: green; }
+                    .btn-group input[type='radio'][value='QC Passed'] { background-color: purple; }
+                  "))
+      ),
+      size = "m",
+      easyClose = FALSE,
+      footer = div(
+        class = "pull-right container",
+        shiny::actionButton(
+          inputId = "editTaskProj_o",
+          label = "Apply",
+          icon = shiny::icon("pencil"),
+          class = "btn-primary"
+        ),
+        shiny::actionButton(
+          inputId = "dltTaskProj_o",
+          label = "Delete",
+          icon = shiny::icon("trash"),
+          class = "btn-danger"
+        ),
+        shiny::actionButton(
+          inputId = "dismiss_modal",
+          label = "Cancel",
+          icon = shiny::icon("xmark"),
+          class = "btn-default"
+        )
+      )
+    ) %>% shiny::showModal() 
+  })
+  
+  observeEvent(input$editTaskProj_o, {
+    tryCatch({
+      dbExecute(con(), paste0("UPDATE tasks SET taskname = '",input$edit_task_name_o,"', description = '",input$edit_task_description_o,
+                              "', status = '",input$edit_task_status_o,"', employee = '",input$edit_task_empl_o,
+                              "', plannedstart = '",paste(format(input$edit_task_dates_o[1], format = "%Y-%m-%d"), format(input$edit_task_start_time_o, format = "%H:%M:%S")),
+                              "', plannedcompletion = '",paste(format(input$edit_task_dates_o[2], format = "%Y-%m-%d"), format(input$edit_task_end_time_o, format = "%H:%M:%S")),
+                              "', colour = '",task_colors[input$edit_task_name_o],"' WHERE taskid = ", input$overviewTimeVis_selected,";"))
+    }, 
+    error = function(e) {
+      dbDisconnect(isolate(con())) 
+      con(dbConnect(RPostgres::Postgres(), user = "u2tnmv2ufe7rpk", password = "p899046d336be15351280fd542015420a8e18e22dfe07c1cccaaa8e0e9fb20631", host = "cdgn4ufq38ipd0.cluster-czz5s0kz4scl.eu-west-1.rds.amazonaws.com", port = 5432, dbname = "d6qh1puq26hrth"))
+      dbExecute(con(), paste0("UPDATE tasks SET taskname = '",input$edit_task_name_o,"', description = '",input$edit_task_description_o,
+                              "', status = '",input$edit_task_status_o,"', employee = '",input$edit_task_empl_o,
+                              "', plannedstart = '",paste(format(input$edit_task_dates_o[1], format = "%Y-%m-%d"), format(input$edit_task_start_time_o, format = "%H:%M:%S")),
+                              "', plannedcompletion = '",paste(format(input$edit_task_dates_o[2], format = "%Y-%m-%d"), format(input$edit_task_end_time_o, format = "%H:%M:%S")),
+                              "', colour = '",task_colors[input$edit_task_name_o],"' WHERE taskid = ", input$overviewTimeVis_selected,";"))
+    })
+    if (input$edit_task_status_o == "In Progress")  {
+      tryCatch({
+        dbExecute(con(), paste0("UPDATE projects SET status = 'In Progress' WHERE projectname = '", selected_task$projectname,"';"))
+      }, 
+      error = function(e) {
+        dbDisconnect(isolate(con())) 
+        con(dbConnect(RPostgres::Postgres(), user = "u2tnmv2ufe7rpk", password = "p899046d336be15351280fd542015420a8e18e22dfe07c1cccaaa8e0e9fb20631", host = "cdgn4ufq38ipd0.cluster-czz5s0kz4scl.eu-west-1.rds.amazonaws.com", port = 5432, dbname = "d6qh1puq26hrth"))
+        dbExecute(con(), paste0("UPDATE projects SET status = 'In Progress' WHERE projectname = '", selected_task$projectname,"';"))
+      })
+    }
+    if (input$edit_task_status == "QC Passed") {
+      df <- data.frame(
+        "task" = input$overviewTimeVis_selected,
+        "project" = selected_task$projectname
+      )
+      task_QC_passed(df)
+    }
+    if (input$edit_task_status == "Completed") tasks_ready_for_QC(input$overviewTimeVis_selected)
+    tryCatch({
+      proj_timevis_data(updateProjTimevis(dbGetQuery(con(), paste0("SELECT * FROM tasks WHERE projectname = '",selected_task$projectname, "';")))) 
+    }, 
+    error = function(e) {
+      dbDisconnect(isolate(con())) 
+      con(dbConnect(RPostgres::Postgres(), user = "u2tnmv2ufe7rpk", password = "p899046d336be15351280fd542015420a8e18e22dfe07c1cccaaa8e0e9fb20631", host = "cdgn4ufq38ipd0.cluster-czz5s0kz4scl.eu-west-1.rds.amazonaws.com", port = 5432, dbname = "d6qh1puq26hrth"))
+      proj_timevis_data(updateProjTimevis(dbGetQuery(con(), paste0("SELECT * FROM tasks WHERE projectname = '",selected_task$projectname, "';")))) 
+    })
+    removeModal()
+  })
+  
+  observeEvent(input$dltTaskProj, {
+    tryCatch({
+      dbExecute(con(), paste0("DELETE FROM tasks WHERE taskid = ", overviewTimeVis_selected,";"))
+    }, 
+    error = function(e) {
+      dbDisconnect(isolate(con())) 
+      con(dbConnect(RPostgres::Postgres(), user = "u2tnmv2ufe7rpk", password = "p899046d336be15351280fd542015420a8e18e22dfe07c1cccaaa8e0e9fb20631", host = "cdgn4ufq38ipd0.cluster-czz5s0kz4scl.eu-west-1.rds.amazonaws.com", port = 5432, dbname = "d6qh1puq26hrth"))
+      dbExecute(con(), paste0("DELETE FROM tasks WHERE taskid = ", overviewTimeVis_selected,";"))
+    })
+    tryCatch({
+      proj_timevis_data(dbGetQuery(con(), paste0("SELECT * FROM tasks WHERE projectname = '",selected_task$projectname, "';")))
+    }, 
+    error = function(e) {
+      dbDisconnect(isolate(con())) 
+      con(dbConnect(RPostgres::Postgres(), user = "u2tnmv2ufe7rpk", password = "p899046d336be15351280fd542015420a8e18e22dfe07c1cccaaa8e0e9fb20631", host = "cdgn4ufq38ipd0.cluster-czz5s0kz4scl.eu-west-1.rds.amazonaws.com", port = 5432, dbname = "d6qh1puq26hrth"))
+      proj_timevis_data(dbGetQuery(con(), paste0("SELECT * FROM tasks WHERE projectname = '",selected_task$projectname, "';")))
+    })
+    removeModal()
+  })
+  
+  observeEvent(input$dismiss_modal, {
+    removeModal()
   })
   
   # User management page - postgres ----

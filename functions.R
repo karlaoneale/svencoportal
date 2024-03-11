@@ -370,6 +370,14 @@ uploadToGoogleDrive <- function(image_binary, project_name, folder_name, filenam
 }
 
 create_order <- function(message_details, drive_link = NULL) {
+  lastid <- tryCatch({
+    lastid <- max(dbGetQuery(con(), paste0("SELECT id FROM orders;"))$id)
+  }, 
+  error = function(e) {
+    dbDisconnect(isolate(con())) 
+    con(dbConnect(RPostgres::Postgres(), user = "u2tnmv2ufe7rpk", password = "p899046d336be15351280fd542015420a8e18e22dfe07c1cccaaa8e0e9fb20631", host = "cdgn4ufq38ipd0.cluster-czz5s0kz4scl.eu-west-1.rds.amazonaws.com", port = 5432, dbname = "d6qh1puq26hrth"))
+    lastid <- max(dbGetQuery(con(), paste0("SELECT id FROM orders;"))$id)
+  })
   projNumber <- substr(message_details$text, 2, 5)
   itemDescription <- trimws(substr(message_details$text, 7, nchar(message_details$text)), "left") 
   from <- tryCatch({
@@ -391,23 +399,23 @@ create_order <- function(message_details, drive_link = NULL) {
   
   if (is.null(drive_link)) {
     tryCatch({
-      dbExecute(con(), paste0("INSERT INTO orders (datesubmitted, itemdescription, submittedby, project, status, lastupdate) VALUES ('",format(Sys.Date(), format = "%d-%m-%Y"),"', '",itemDescription, "', '", from,
-                              "', '",projectName,"', 'Requested', '",format(Sys.Date(), format = "%d-%m-%Y"),"') RETURNING id;"))    }, 
+      dbExecute(con(), paste0("INSERT INTO orders (id, datesubmitted, itemdescription, submittedby, project, status, lastupdate) VALUES (",lastid+1,",'",format(Sys.Date(), format = "%d-%m-%Y"),"', '",itemDescription, "', '", from,
+                              "', '",projectName,"', 'Requested', '",format(Sys.Date(), format = "%d-%m-%Y"),"');"))    }, 
     error = function(e) {
       dbDisconnect(isolate(con())) 
       con(dbConnect(RPostgres::Postgres(), user = "u2tnmv2ufe7rpk", password = "p899046d336be15351280fd542015420a8e18e22dfe07c1cccaaa8e0e9fb20631", host = "cdgn4ufq38ipd0.cluster-czz5s0kz4scl.eu-west-1.rds.amazonaws.com", port = 5432, dbname = "d6qh1puq26hrth"))
-      dbExecute(con(), paste0("INSERT INTO orders (datesubmitted, itemdescription, submittedby, project, status, lastupdate) VALUES ('",format(Sys.Date(), format = "%d-%m-%Y"),"', '",itemDescription, "', '", from,
-                              "', '",projectName,"', 'Requested', '",format(Sys.Date(), format = "%d-%m-%Y"),"') RETURNING id;"))    })
+      dbExecute(con(), paste0("INSERT INTO orders (id, datesubmitted, itemdescription, submittedby, project, status, lastupdate) VALUES (",lastid+1,",'",format(Sys.Date(), format = "%d-%m-%Y"),"', '",itemDescription, "', '", from,
+                              "', '",projectName,"', 'Requested', '",format(Sys.Date(), format = "%d-%m-%Y"),"');"))    })
   } else {
     tryCatch({
-      dbExecute(con(), paste0("INSERT INTO orders (datesubmitted, itemdescription, submittedby, project, status, lastupdate, images) 
-                            VALUES ('",format(Sys.Date(), format = "%d-%m-%Y"),"', '",itemDescription, "', '", from,
+      dbExecute(con(), paste0("INSERT INTO orders (id, datesubmitted, itemdescription, submittedby, project, status, lastupdate, images) 
+                            VALUES (",last_id+1,",'",format(Sys.Date(), format = "%d-%m-%Y"),"', '",itemDescription, "', '", from,
                               "', '",projectName,"', 'Requested', '",format(Sys.Date(), format = "%d-%m-%Y"),"', '",drive_link,"') RETURNING id;"))    }, 
     error = function(e) {
       dbDisconnect(isolate(con())) 
       con(dbConnect(RPostgres::Postgres(), user = "u2tnmv2ufe7rpk", password = "p899046d336be15351280fd542015420a8e18e22dfe07c1cccaaa8e0e9fb20631", host = "cdgn4ufq38ipd0.cluster-czz5s0kz4scl.eu-west-1.rds.amazonaws.com", port = 5432, dbname = "d6qh1puq26hrth"))
-      dbExecute(con(), paste0("INSERT INTO orders (datesubmitted, itemdescription, submittedby, project, status, lastupdate, images) 
-                            VALUES ('",format(Sys.Date(), format = "%d-%m-%Y"),"', '",itemDescription, "', '", from,
+      dbExecute(con(), paste0("INSERT INTO orders (id, datesubmitted, itemdescription, submittedby, project, status, lastupdate, images) 
+                            VALUES (",last_id+1,",'",format(Sys.Date(), format = "%d-%m-%Y"),"', '",itemDescription, "', '", from,
                               "', '",projectName,"', 'Requested', '",format(Sys.Date(), format = "%d-%m-%Y"),"', '",drive_link,"') RETURNING id;"))    })
   }
   orderid <- tryCatch({
