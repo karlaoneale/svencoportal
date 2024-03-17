@@ -295,7 +295,7 @@ server <- function(input, output, session) {
           con(dbConnect(RPostgres::Postgres(), user = "u2tnmv2ufe7rpk", password = "p899046d336be15351280fd542015420a8e18e22dfe07c1cccaaa8e0e9fb20631", host = "cdgn4ufq38ipd0.cluster-czz5s0kz4scl.eu-west-1.rds.amazonaws.com", port = 5432, dbname = "d6qh1puq26hrth"))
           quotes <- dbGetQuery(con(), paste0("SELECT quotes FROM orders WHERE id = ",orders_selected_row()$id,";"))$quotes
         })
-        if (is.na(quotes)) {
+        if (is.na(unique(quotes))) {
           modalDialog(
             title = "Upload a Quote",
             div(
