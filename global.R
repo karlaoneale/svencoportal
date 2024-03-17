@@ -23,7 +23,9 @@ library(RCurl)
 
 source("functions.R")
 google_drive_service_acc <- "svencoportal-46a05025cc4a.json"
-
+print(Sys.getenv("SAGE_API_URL"))
+Sys.getenv("SAGE_API_URL")
+Sys.getenv("SAGE_API_URL")
 api_url <- Sys.getenv("SAGE_API_URL")
 username <- Sys.getenv("SAGE_USER")
 password <- Sys.getenv("SAGE_PASS")
