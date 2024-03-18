@@ -1,5 +1,37 @@
 con <- reactiveVal(dbConnect(RPostgres::Postgres(), user = "u2tnmv2ufe7rpk", password = "p899046d336be15351280fd542015420a8e18e22dfe07c1cccaaa8e0e9fb20631", host = "cdgn4ufq38ipd0.cluster-czz5s0kz4scl.eu-west-1.rds.amazonaws.com", port = 5432, dbname = "d6qh1puq26hrth"))
 
+get_query <- function(query) {
+  a <- tryCatch({
+    a <- dbGetQuery(con(), query)
+  }, 
+  error = function(e) {
+    dbDisconnect(isolate(con())) 
+    con(dbConnect(RPostgres::Postgres(), user = "u2tnmv2ufe7rpk", password = "p899046d336be15351280fd542015420a8e18e22dfe07c1cccaaa8e0e9fb20631", host = "cdgn4ufq38ipd0.cluster-czz5s0kz4scl.eu-west-1.rds.amazonaws.com", port = 5432, dbname = "d6qh1puq26hrth"))
+    a <- dbGetQuery(con(), query)  
+  })
+  return(a)
+}
+
+execute <- function(query) {
+  tryCatch({
+    dbExecute(con(), query)
+  }, 
+  error = function(e) {
+    dbDisconnect(isolate(con())) 
+    con(dbConnect(RPostgres::Postgres(), user = "u2tnmv2ufe7rpk", password = "p899046d336be15351280fd542015420a8e18e22dfe07c1cccaaa8e0e9fb20631", host = "cdgn4ufq38ipd0.cluster-czz5s0kz4scl.eu-west-1.rds.amazonaws.com", port = 5432, dbname = "d6qh1puq26hrth"))
+    dbExecute(con(), query)        
+  })
+}
+
+get_pm_wa <- function() {return(get_query("SELECT wa_number FROM active_ts WHERE pm = 'true';")$wa_number)}
+
+get_ac_wa <- function() {return(get_query("SELECT wa_number FROM active_ts WHERE ac = 'true';")$wa_number)}
+
+get_ai_wa <- function() {return(get_query("SELECT wa_number FROM active_ts WHERE ai = 'true';")$wa_number)}
+
+get_ap_wa <- function() {return(get_query("SELECT wa_number FROM active_ts WHERE ap = 'true';")$wa_number)}
+
+get_md_wa <- function() {return(get_query("SELECT wa_number FROM active_ts WHERE md = 'true';")$wa_number)}
 
 get_from_api <- function(param, action = "Get", query_params = "") {
   url <- paste0(api_url, param, "/", action, "?", URLencode(query_params), "companyid=", companyid, "&apikey=", apikey)
@@ -147,18 +179,16 @@ send_template <- function(wa_id, body_params = NULL, template_name, heading = NU
     api_data <- content(response, "text", encoding = "UTF-8")
     parsed_data <- fromJSON(api_data)
     message_id <- fromJSON(rawToChar(response$content))[["messages"]][["id"]]
-    tryCatch({
-      dbExecute(con(),paste0("INSERT INTO sent_wa (id, timestamp, recipientid, task, project, orderid, docid, invoicename, message) VALUES ('",message_id 
-                             , "',", as.numeric(Sys.time()),
-                             ",'", wa_id, "','", taskid, "','", project, "','", orderid, "','", docid,"', '",invoicename,"','",template_name,"');"))
-    }, 
-    error = function(e) {
-      dbDisconnect(isolate(con())) 
-      con(dbConnect(RPostgres::Postgres(), user = "u2tnmv2ufe7rpk", password = "p899046d336be15351280fd542015420a8e18e22dfe07c1cccaaa8e0e9fb20631", host = "cdgn4ufq38ipd0.cluster-czz5s0kz4scl.eu-west-1.rds.amazonaws.com", port = 5432, dbname = "d6qh1puq26hrth"))
-      dbExecute(con(),paste0("INSERT INTO sent_wa (id, timestamp, recipientid, task, project, orderid, docid, invoicename, message) VALUES ('",message_id 
-                             , "',", as.numeric(Sys.time()),
-                             ",'", wa_id, "','", taskid, "','", project, "','", orderid, "','", docid,"', '",invoicename,"','",template_name,"');"))
-    })
+    if (template_name %in% templates_that_req_actions) {
+      execute(paste0("INSERT INTO sent_wa (id, timestamp, recipientid, task, project, orderid, docid, invoicename, message, responded) VALUES ('",message_id 
+                     , "',", as.numeric(Sys.time()),
+                     ",'", wa_id, "','", taskid, "','", project, "','", orderid, "','", docid,"', '",invoicename,"','",template_name,"', 'false');"))
+    } else {
+      execute(paste0("INSERT INTO sent_wa (id, timestamp, recipientid, task, project, orderid, docid, invoicename, message, responded) VALUES ('",message_id 
+                     , "',", as.numeric(Sys.time()),
+                     ",'", wa_id, "','", taskid, "','", project, "','", orderid, "','", docid,"', '",invoicename,"','",template_name,"', 'true');"))
+    }
+    
     print(paste0("Sent ",template_name," template to ",wa_id))
     return(TRUE)
   } else {
@@ -201,14 +231,7 @@ get_new_webhooks <- function() {
           rec_webhook <- webhook$changes[[1]]$value$messages[[1]]
           type <- rec_webhook$type
           print(paste0("New ",type," webhook received from ", rec_webhook$from))
-          from <- tryCatch({
-            from <- (dbGetQuery(con(), paste0("SELECT name FROM active_ts WHERE wa_number = '",rec_webhook$from,"';"))$name)[1]
-          }, 
-          error = function(e) {
-            dbDisconnect(isolate(con())) 
-            con(dbConnect(RPostgres::Postgres(), user = "u2tnmv2ufe7rpk", password = "p899046d336be15351280fd542015420a8e18e22dfe07c1cccaaa8e0e9fb20631", host = "cdgn4ufq38ipd0.cluster-czz5s0kz4scl.eu-west-1.rds.amazonaws.com", port = 5432, dbname = "d6qh1puq26hrth"))
-            from <- (dbGetQuery(con(), paste0("SELECT name FROM active_ts WHERE wa_number = '",rec_webhook$from,"';"))$name)[1]
-          })
+          from <- get_query(paste0("SELECT name FROM active_ts WHERE wa_number = '",rec_webhook$from,"';"))$name
           if (is.na(from)) {
             send_template(rec_webhook$from, template_name = "unknown_number")
             next
@@ -241,7 +264,7 @@ get_new_webhooks <- function() {
             if (grepl("^N[0-9]{4}.*$", df$text)) { 
               add_note(df)
             } else if (grepl("^INV\\d{6}$", df$text)) {
-              send_invoice_to_PM(df)
+              send_invoice_to_AC(df)
             } else if (grepl("^P[0-9]{4}.*$", df$text)) {
               create_order(df)
             } else send_template(rec_webhook$from, template_name = "unknown_request")
@@ -260,14 +283,7 @@ get_new_webhooks <- function() {
             )
             if (grepl("^[0-9]{4}$", df$text)) {
               drive_link <- get_WA_image_and_upload(df, "ProjectImages", df$text)
-              tryCatch({
-                dbExecute(con(), paste0("UPDATE projects SET images = '",drive_link, "' WHERE projectname LIKE '",df$text,"%';" ))
-              }, 
-              error = function(e) {
-                dbDisconnect(isolate(con())) 
-                con(dbConnect(RPostgres::Postgres(), user = "u2tnmv2ufe7rpk", password = "p899046d336be15351280fd542015420a8e18e22dfe07c1cccaaa8e0e9fb20631", host = "cdgn4ufq38ipd0.cluster-czz5s0kz4scl.eu-west-1.rds.amazonaws.com", port = 5432, dbname = "d6qh1puq26hrth"))
-                dbExecute(con(), paste0("UPDATE projects SET images = '",drive_link, "' WHERE projectname LIKE '",df$text,"%';" ))
-              })
+              execute(paste0("UPDATE projects SET images = '",drive_link, "' WHERE projectname LIKE '",df$text,"%';" ))
               forward_image(df, from)
             }
             else if (grepl("^P[0-9]{4}.*$", df$text)) {
@@ -298,14 +314,8 @@ get_new_webhooks <- function() {
         unique_df <- received_df[!duplicated(received_df), ]
         for (i in 1:nrow(unique_df)) {
           row <- unique_df[i, ]
-          tryCatch({
-            dbExecute(con(), paste0("INSERT INTO received_wa (id, fromid, timestamp, type, text) VALUES ('",
-                                    row$id, "', '", row$fromid, "', ", row$timestamp,", '", row$type,"', '", row$text,"');"))          }, 
-          error = function(e) {
-            dbDisconnect(isolate(con())) 
-            con(dbConnect(RPostgres::Postgres(), user = "u2tnmv2ufe7rpk", password = "p899046d336be15351280fd542015420a8e18e22dfe07c1cccaaa8e0e9fb20631", host = "cdgn4ufq38ipd0.cluster-czz5s0kz4scl.eu-west-1.rds.amazonaws.com", port = 5432, dbname = "d6qh1puq26hrth"))
-            dbExecute(con(), paste0("INSERT INTO received_wa (id, fromid, timestamp, type, text) VALUES ('",
-                                    row$id, "', '", row$fromid, "', ", row$timestamp,", '", row$type,"', '", row$text,"');"))          })
+          execute(paste0("INSERT INTO received_wa (id, fromid, timestamp, type, text) VALUES ('",
+                                    row$id, "', '", row$fromid, "', ", row$timestamp,", '", row$type,"', '", row$text,"');"))        
           print(paste0("Webhook processed: ", row$text, " FROM ", row$fromid))
         }
       }
@@ -370,62 +380,22 @@ uploadToGoogleDrive <- function(image_binary, project_name, folder_name, filenam
 }
 
 create_order <- function(message_details, drive_link = NULL) {
-  lastid <- tryCatch({
-    lastid <- max(dbGetQuery(con(), paste0("SELECT id FROM orders;"))$id)
-  }, 
-  error = function(e) {
-    dbDisconnect(isolate(con())) 
-    con(dbConnect(RPostgres::Postgres(), user = "u2tnmv2ufe7rpk", password = "p899046d336be15351280fd542015420a8e18e22dfe07c1cccaaa8e0e9fb20631", host = "cdgn4ufq38ipd0.cluster-czz5s0kz4scl.eu-west-1.rds.amazonaws.com", port = 5432, dbname = "d6qh1puq26hrth"))
-    lastid <- max(dbGetQuery(con(), paste0("SELECT id FROM orders;"))$id)
-  })
+  lastid <- max(get_query(paste0("SELECT id FROM orders;"))$id)
   projNumber <- substr(message_details$text, 2, 5)
   itemDescription <- trimws(substr(message_details$text, 7, nchar(message_details$text)), "left") 
-  from <- tryCatch({
-    from <- (dbGetQuery(con(), paste0("SELECT name FROM active_ts WHERE wa_number = '",message_details$from,"';"))$name)[1]
-  }, 
-  error = function(e) {
-    dbDisconnect(isolate(con())) 
-    con(dbConnect(RPostgres::Postgres(), user = "u2tnmv2ufe7rpk", password = "p899046d336be15351280fd542015420a8e18e22dfe07c1cccaaa8e0e9fb20631", host = "cdgn4ufq38ipd0.cluster-czz5s0kz4scl.eu-west-1.rds.amazonaws.com", port = 5432, dbname = "d6qh1puq26hrth"))
-    from <- (dbGetQuery(con(), paste0("SELECT name FROM active_ts WHERE wa_number = '",message_details$from,"';"))$name)[1]
-  })
-  projectName <- tryCatch({
-    projectName <- dbGetQuery(con(), paste0("SELECT projectname FROM projects WHERE projectname LIKE '", projNumber, "%';"))$projectname
-  }, 
-  error = function(e) {
-    dbDisconnect(isolate(con())) 
-    con(dbConnect(RPostgres::Postgres(), user = "u2tnmv2ufe7rpk", password = "p899046d336be15351280fd542015420a8e18e22dfe07c1cccaaa8e0e9fb20631", host = "cdgn4ufq38ipd0.cluster-czz5s0kz4scl.eu-west-1.rds.amazonaws.com", port = 5432, dbname = "d6qh1puq26hrth"))
-    projectName <- dbGetQuery(con(), paste0("SELECT projectname FROM projects WHERE projectname LIKE '", projNumber, "%';"))$projectname
-  })
+  from <- (get_query(paste0("SELECT name FROM active_ts WHERE wa_number = '",message_details$from,"';"))$name)[1]
+  
+  projectName <- get_query(paste0("SELECT projectname FROM projects WHERE projectname LIKE '", projNumber, "%';"))$projectname
   
   if (is.null(drive_link)) {
-    tryCatch({
-      dbExecute(con(), paste0("INSERT INTO orders (id, datesubmitted, itemdescription, submittedby, project, status, lastupdate) VALUES (",lastid+1,",'",format(Sys.Date(), format = "%d-%m-%Y"),"', '",itemDescription, "', '", from,
-                              "', '",projectName,"', 'Requested', '",format(Sys.Date(), format = "%d-%m-%Y"),"');"))    }, 
-    error = function(e) {
-      dbDisconnect(isolate(con())) 
-      con(dbConnect(RPostgres::Postgres(), user = "u2tnmv2ufe7rpk", password = "p899046d336be15351280fd542015420a8e18e22dfe07c1cccaaa8e0e9fb20631", host = "cdgn4ufq38ipd0.cluster-czz5s0kz4scl.eu-west-1.rds.amazonaws.com", port = 5432, dbname = "d6qh1puq26hrth"))
-      dbExecute(con(), paste0("INSERT INTO orders (id, datesubmitted, itemdescription, submittedby, project, status, lastupdate) VALUES (",lastid+1,",'",format(Sys.Date(), format = "%d-%m-%Y"),"', '",itemDescription, "', '", from,
-                              "', '",projectName,"', 'Requested', '",format(Sys.Date(), format = "%d-%m-%Y"),"');"))    })
+    execute(paste0("INSERT INTO orders (id, datesubmitted, itemdescription, submittedby, project, status, lastupdate) VALUES (",lastid+1,",'",format(Sys.Date(), format = "%d-%m-%Y"),"', '",itemDescription, "', '", from,
+                              "', '",projectName,"', 'Requested', '",format(Sys.Date(), format = "%d-%m-%Y"),"');"))  
   } else {
-    tryCatch({
-      dbExecute(con(), paste0("INSERT INTO orders (id, datesubmitted, itemdescription, submittedby, project, status, lastupdate, images) 
+    execute(paste0("INSERT INTO orders (id, datesubmitted, itemdescription, submittedby, project, status, lastupdate, images) 
                             VALUES (",last_id+1,",'",format(Sys.Date(), format = "%d-%m-%Y"),"', '",itemDescription, "', '", from,
-                              "', '",projectName,"', 'Requested', '",format(Sys.Date(), format = "%d-%m-%Y"),"', '",drive_link,"') RETURNING id;"))    }, 
-    error = function(e) {
-      dbDisconnect(isolate(con())) 
-      con(dbConnect(RPostgres::Postgres(), user = "u2tnmv2ufe7rpk", password = "p899046d336be15351280fd542015420a8e18e22dfe07c1cccaaa8e0e9fb20631", host = "cdgn4ufq38ipd0.cluster-czz5s0kz4scl.eu-west-1.rds.amazonaws.com", port = 5432, dbname = "d6qh1puq26hrth"))
-      dbExecute(con(), paste0("INSERT INTO orders (id, datesubmitted, itemdescription, submittedby, project, status, lastupdate, images) 
-                            VALUES (",last_id+1,",'",format(Sys.Date(), format = "%d-%m-%Y"),"', '",itemDescription, "', '", from,
-                              "', '",projectName,"', 'Requested', '",format(Sys.Date(), format = "%d-%m-%Y"),"', '",drive_link,"') RETURNING id;"))    })
+                              "', '",projectName,"', 'Requested', '",format(Sys.Date(), format = "%d-%m-%Y"),"', '",drive_link,"') RETURNING id;"))
   }
-  orderid <- tryCatch({
-    orderid <- dbGetQuery(con(), "SELECT * FROM orders ORDER BY id DESC LIMIT 1")$id
-  }, 
-  error = function(e) {
-    dbDisconnect(isolate(con())) 
-    con(dbConnect(RPostgres::Postgres(), user = "u2tnmv2ufe7rpk", password = "p899046d336be15351280fd542015420a8e18e22dfe07c1cccaaa8e0e9fb20631", host = "cdgn4ufq38ipd0.cluster-czz5s0kz4scl.eu-west-1.rds.amazonaws.com", port = 5432, dbname = "d6qh1puq26hrth"))
-    orderid <- dbGetQuery(con(), "SELECT * FROM orders ORDER BY id DESC LIMIT 1")$id
-  })
+  orderid <- get_query("SELECT * FROM orders ORDER BY id DESC LIMIT 1")$id
   
   body_params <- list(
     list('type' = 'text', 'text' = from),
@@ -433,22 +403,8 @@ create_order <- function(message_details, drive_link = NULL) {
     list('type' = 'text', 'text' = orderid),
     list('type' = 'text', 'text' = itemDescription)
   )
-  admin <- tryCatch({
-    admin <- dbGetQuery(con(), paste0("SELECT wa_number FROM active_ts WHERE ap = 'true';"))$wa_number
-  }, 
-  error = function(e) {
-    dbDisconnect(isolate(con())) 
-    con(dbConnect(RPostgres::Postgres(), user = "u2tnmv2ufe7rpk", password = "p899046d336be15351280fd542015420a8e18e22dfe07c1cccaaa8e0e9fb20631", host = "cdgn4ufq38ipd0.cluster-czz5s0kz4scl.eu-west-1.rds.amazonaws.com", port = 5432, dbname = "d6qh1puq26hrth"))
-    admin <- dbGetQuery(con(), paste0("SELECT wa_number FROM active_ts WHERE ap = 'true';"))$wa_number
-  })
-  pm <- tryCatch({
-    pm <- dbGetQuery(con(), paste0("SELECT wa_number FROM active_ts WHERE pm = 'true';"))$wa_number
-  }, 
-  error = function(e) {
-    dbDisconnect(isolate(con())) 
-    con(dbConnect(RPostgres::Postgres(), user = "u2tnmv2ufe7rpk", password = "p899046d336be15351280fd542015420a8e18e22dfe07c1cccaaa8e0e9fb20631", host = "cdgn4ufq38ipd0.cluster-czz5s0kz4scl.eu-west-1.rds.amazonaws.com", port = 5432, dbname = "d6qh1puq26hrth"))
-    pm <- dbGetQuery(con(), paste0("SELECT wa_number FROM active_ts WHERE pm = 'true';"))$wa_number
-  })
+  admin <- get_ap_wa()
+  pm <- get_pm_wa()
   if (is.null(drive_link)) {
     sent_to_admin <- send_template(admin, body_params, "new_order", project = projectName, orderid = orderid)
     send_template(pm, body_params, "new_order_pm", project = projectName, orderid = orderid)
@@ -465,54 +421,19 @@ create_order <- function(message_details, drive_link = NULL) {
 add_note <- function(df) {
   projNumber <- substr(df$text, 2, 5)
   note <- trimws(substr(df$text, 7, nchar(df$text)), "left") 
-  from <- tryCatch({
-    from <- (dbGetQuery(con(), paste0("SELECT name FROM active_ts WHERE wa_number = '",df$from,"';"))$name)[1]
-  }, 
-  error = function(e) {
-    dbDisconnect(isolate(con())) 
-    con(dbConnect(RPostgres::Postgres(), user = "u2tnmv2ufe7rpk", password = "p899046d336be15351280fd542015420a8e18e22dfe07c1cccaaa8e0e9fb20631", host = "cdgn4ufq38ipd0.cluster-czz5s0kz4scl.eu-west-1.rds.amazonaws.com", port = 5432, dbname = "d6qh1puq26hrth"))
-    from <- (dbGetQuery(con(), paste0("SELECT name FROM active_ts WHERE wa_number = '",df$from,"';"))$name)[1]
-  })
-  projectName <- tryCatch({
-    projectName <- dbGetQuery(con(), paste0("SELECT projectname FROM projects WHERE projectname LIKE '", projNumber, "%';"))$projectname
-  }, 
-  error = function(e) {
-    dbDisconnect(isolate(con())) 
-    con(dbConnect(RPostgres::Postgres(), user = "u2tnmv2ufe7rpk", password = "p899046d336be15351280fd542015420a8e18e22dfe07c1cccaaa8e0e9fb20631", host = "cdgn4ufq38ipd0.cluster-czz5s0kz4scl.eu-west-1.rds.amazonaws.com", port = 5432, dbname = "d6qh1puq26hrth"))
-    projectName <- dbGetQuery(con(), paste0("SELECT projectname FROM projects WHERE projectname LIKE '", projNumber, "%';"))$projectname
-  })
-  existingNotes <- tryCatch({
-    existingNotes <- dbGetQuery(con(), paste0("SELECT notes FROM projects WHERE projectname = '", projectName, "';"))$notes
-  }, 
-  error = function(e) {
-    dbDisconnect(isolate(con())) 
-    con(dbConnect(RPostgres::Postgres(), user = "u2tnmv2ufe7rpk", password = "p899046d336be15351280fd542015420a8e18e22dfe07c1cccaaa8e0e9fb20631", host = "cdgn4ufq38ipd0.cluster-czz5s0kz4scl.eu-west-1.rds.amazonaws.com", port = 5432, dbname = "d6qh1puq26hrth"))
-    existingNotes <- dbGetQuery(con(), paste0("SELECT notes FROM projects WHERE projectname = '", projectName, "';"))$notes
-  })
+  from <- (get_query(paste0("SELECT name FROM active_ts WHERE wa_number = '",df$from,"';"))$name)[1]
+  projectName <- get_query(paste0("SELECT projectname FROM projects WHERE projectname LIKE '", projNumber, "%';"))$projectname
+  existingNotes <- get_query(paste0("SELECT notes FROM projects WHERE projectname = '", projectName, "';"))$notes
   if (!is.na(existingNotes)) {note = paste0(existingNotes, "   ", note)}
   
-  tryCatch({
-    dbExecute(con(), paste0("UPDATE projects SET notes = '",note,"' WHERE projectname = '",projectName,"';"))
-  }, 
-  error = function(e) {
-    dbDisconnect(isolate(con())) 
-    con(dbConnect(RPostgres::Postgres(), user = "u2tnmv2ufe7rpk", password = "p899046d336be15351280fd542015420a8e18e22dfe07c1cccaaa8e0e9fb20631", host = "cdgn4ufq38ipd0.cluster-czz5s0kz4scl.eu-west-1.rds.amazonaws.com", port = 5432, dbname = "d6qh1puq26hrth"))
-    dbExecute(con(), paste0("UPDATE projects SET notes = '",note,"' WHERE projectname = '",projectName,"';"))
-  })
+  execute(paste0("UPDATE projects SET notes = '",note,"' WHERE projectname = '",projectName,"';"))
   
   body_params <- list(
     list('type' = 'text', 'text' = from),
     list('type' = 'text', 'text' = projectName),
     list('type' = 'text', 'text' = note)
   )
-  pm <- tryCatch({
-    pm <- dbGetQuery(con(), paste0("SELECT wa_number FROM active_ts WHERE pm = 'true';"))$wa_number
-  }, 
-  error = function(e) {
-    dbDisconnect(isolate(con())) 
-    con(dbConnect(RPostgres::Postgres(), user = "u2tnmv2ufe7rpk", password = "p899046d336be15351280fd542015420a8e18e22dfe07c1cccaaa8e0e9fb20631", host = "cdgn4ufq38ipd0.cluster-czz5s0kz4scl.eu-west-1.rds.amazonaws.com", port = 5432, dbname = "d6qh1puq26hrth"))
-    pm <- dbGetQuery(con(), paste0("SELECT wa_number FROM active_ts WHERE pm = 'true';"))$wa_number
-  })
+  pm <- get_pm_wa()
   if (is.na(from) || pm != from) sent_to_pm <- send_template(pm, body_params, "new_note", project = projectName)
   else sent_to_pm <- TRUE
   
@@ -522,107 +443,39 @@ add_note <- function(df) {
 }
 
 task_QC_passed <- function(task_details) {
-  tryCatch({
-    dbExecute(con(), paste0("UPDATE tasks SET status = 'Completed' WHERE taskid = ", task_details$task, ";"))
-  }, 
-  error = function(e) {
-    dbDisconnect(isolate(con())) 
-    con(dbConnect(RPostgres::Postgres(), user = "u2tnmv2ufe7rpk", password = "p899046d336be15351280fd542015420a8e18e22dfe07c1cccaaa8e0e9fb20631", host = "cdgn4ufq38ipd0.cluster-czz5s0kz4scl.eu-west-1.rds.amazonaws.com", port = 5432, dbname = "d6qh1puq26hrth"))
-    dbExecute(con(), paste0("UPDATE tasks SET status = 'Completed' WHERE taskid = ", task_details$task, ";"))
-  })
-  allstatuses <- tryCatch({
-    allstatuses <- dbGetQuery(con(), paste0("SELECT status FROM tasks WHERE projectname = '", task_details$project, "';"))$status
-  }, 
-  error = function(e) {
-    dbDisconnect(isolate(con())) 
-    con(dbConnect(RPostgres::Postgres(), user = "u2tnmv2ufe7rpk", password = "p899046d336be15351280fd542015420a8e18e22dfe07c1cccaaa8e0e9fb20631", host = "cdgn4ufq38ipd0.cluster-czz5s0kz4scl.eu-west-1.rds.amazonaws.com", port = 5432, dbname = "d6qh1puq26hrth"))
-    allstatuses <- dbGetQuery(con(), paste0("SELECT status FROM tasks WHERE projectname = '", task_details$project, "';"))$status
-  })
+  execute(paste0("UPDATE tasks SET status = 'Completed' WHERE taskid = ", task_details$task, ";"))
+  allstatuses <- get_query(paste0("SELECT status FROM tasks WHERE projectname = '", task_details$project, "';"))$status
   if (length(unique(allstatuses))==1 && unique(allstatuses) == "Completed") {
     body <- list(
       list("type" = "text", "text" = task_details$project)
     )
-    QC <- tryCatch({
-      QC <- dbGetQuery(con(), paste0("SELECT wa_number FROM active_ts WHERE pm = 'true';"))$wa_number
-    }, 
-    error = function(e) {
-      dbDisconnect(isolate(con())) 
-      con(dbConnect(RPostgres::Postgres(), user = "u2tnmv2ufe7rpk", password = "p899046d336be15351280fd542015420a8e18e22dfe07c1cccaaa8e0e9fb20631", host = "cdgn4ufq38ipd0.cluster-czz5s0kz4scl.eu-west-1.rds.amazonaws.com", port = 5432, dbname = "d6qh1puq26hrth"))
-      QC <- dbGetQuery(con(), paste0("SELECT wa_number FROM active_ts WHERE pm = 'true';"))$wa_number
-    })
-    send_template(QC, body, "all_tasks_completed", project = task_details$project)
-    tryCatch({
-      dbExecute(con(), paste0("UPDATE projects SET status = 'Ready for QC' WHERE projectname = '", task_details$project, "';"))
-    }, 
-    error = function(e) {
-      dbDisconnect(isolate(con())) 
-      con(dbConnect(RPostgres::Postgres(), user = "u2tnmv2ufe7rpk", password = "p899046d336be15351280fd542015420a8e18e22dfe07c1cccaaa8e0e9fb20631", host = "cdgn4ufq38ipd0.cluster-czz5s0kz4scl.eu-west-1.rds.amazonaws.com", port = 5432, dbname = "d6qh1puq26hrth"))
-      dbExecute(con(), paste0("UPDATE projects SET status = 'Ready for QC' WHERE projectname = '", task_details$project, "';"))
-    })
+   QC <- get_pm_wa()
+   send_template(QC, body, "all_tasks_completed", project = task_details$project)
+   execute(paste0("UPDATE projects SET status = 'Ready for QC' WHERE projectname = '", task_details$project, "';"))
   }
 }
 
 tasks_ready_for_QC <- function(taskID) {
-  df <- tryCatch({
-    df <- dbGetQuery(con(), paste0("SELECT * FROM tasks WHERE taskid = '", taskID, "';"))
-  }, 
-  error = function(e) {
-    dbDisconnect(isolate(con())) 
-    con(dbConnect(RPostgres::Postgres(), user = "u2tnmv2ufe7rpk", password = "p899046d336be15351280fd542015420a8e18e22dfe07c1cccaaa8e0e9fb20631", host = "cdgn4ufq38ipd0.cluster-czz5s0kz4scl.eu-west-1.rds.amazonaws.com", port = 5432, dbname = "d6qh1puq26hrth"))
-    df <- dbGetQuery(con(), paste0("SELECT * FROM tasks WHERE taskid = '", taskID, "';"))
-  })
-  tryCatch({
-    dbExecute(con(), paste0("UPDATE tasks SET status = 'Ready for QC' WHERE taskid = ", taskID, ";"))
-  }, 
-  error = function(e) {
-    dbDisconnect(isolate(con())) 
-    con(dbConnect(RPostgres::Postgres(), user = "u2tnmv2ufe7rpk", password = "p899046d336be15351280fd542015420a8e18e22dfe07c1cccaaa8e0e9fb20631", host = "cdgn4ufq38ipd0.cluster-czz5s0kz4scl.eu-west-1.rds.amazonaws.com", port = 5432, dbname = "d6qh1puq26hrth"))
-    dbExecute(con(), paste0("UPDATE tasks SET status = 'Ready for QC' WHERE taskid = ", taskID, ";"))
-  })
+  df <- get_query(paste0("SELECT * FROM tasks WHERE taskid = '", taskID, "';"))
+  execute(paste0("UPDATE tasks SET status = 'Ready for QC' WHERE taskid = ", taskID, ";"))
   body <- list(
     list("type" = "text", "text" =  df$employee), 
     list("type" = "text", "text" = paste0(df$taskname, ": ", df$description)), 
     list("type" = "text", "text" = df$projectname)
   )
-  QC <- tryCatch({
-    QC <- dbGetQuery(con(), paste0("SELECT wa_number FROM active_ts WHERE pm = 'true';"))$wa_number
-  }, 
-  error = function(e) {
-    dbDisconnect(isolate(con())) 
-    con(dbConnect(RPostgres::Postgres(), user = "u2tnmv2ufe7rpk", password = "p899046d336be15351280fd542015420a8e18e22dfe07c1cccaaa8e0e9fb20631", host = "cdgn4ufq38ipd0.cluster-czz5s0kz4scl.eu-west-1.rds.amazonaws.com", port = 5432, dbname = "d6qh1puq26hrth"))
-    QC <- dbGetQuery(con(), paste0("SELECT wa_number FROM active_ts WHERE pm = 'true';"))$wa_number
-  })
+  QC <- get_pm_wa()
   send_template(QC, body, "task_complete", taskid = taskID, project = df$projectname)
 }
 
 handle_wa_button <- function(button_details, invoiceName=NULL) {
   if (button_details$type == "document") {
-    accounts <- tryCatch({
-      accounts <- dbGetQuery(con(), paste0("SELECT wa_number FROM active_ts WHERE ac = 'true';"))$wa_number    }, 
-    error = function(e) {
-      dbDisconnect(isolate(con())) 
-      con(dbConnect(RPostgres::Postgres(), user = "u2tnmv2ufe7rpk", password = "p899046d336be15351280fd542015420a8e18e22dfe07c1cccaaa8e0e9fb20631", host = "cdgn4ufq38ipd0.cluster-czz5s0kz4scl.eu-west-1.rds.amazonaws.com", port = 5432, dbname = "d6qh1puq26hrth"))
-      accounts <- dbGetQuery(con(), paste0("SELECT wa_number FROM active_ts WHERE ac = 'true';"))$wa_number    })
+    accounts <- get_ac_wa()
     if (accounts == button_details$from) {
-      sent_wa <- tryCatch({
-        sent_wa <- dbGetQuery(con(), paste0("SELECT * FROM sent_wa WHERE id = '", button_details$contextid, "';"))
-      }, 
-      error = function(e) {
-        dbDisconnect(isolate(con())) 
-        con(dbConnect(RPostgres::Postgres(), user = "u2tnmv2ufe7rpk", password = "p899046d336be15351280fd542015420a8e18e22dfe07c1cccaaa8e0e9fb20631", host = "cdgn4ufq38ipd0.cluster-czz5s0kz4scl.eu-west-1.rds.amazonaws.com", port = 5432, dbname = "d6qh1puq26hrth"))
-        sent_wa <- dbGetQuery(con(), paste0("SELECT * FROM sent_wa WHERE id = '", button_details$contextid, "';"))
-      })
+      sent_wa <- get_query(paste0("SELECT * FROM sent_wa WHERE id = '", button_details$contextid, "';"))
       if (!is.null(sent_wa$docid)) {
         docID <- sent_wa$docid
         orderid <- sent_wa$orderid
-        order_description <- tryCatch({
-          order_description <- dbGetQuery(con(), paste0("SELECT itemdescription FROM orders WHERE id = ",orderid,";"))$itemdescription
-        }, 
-        error = function(e) {
-          dbDisconnect(isolate(con())) 
-          con(dbConnect(RPostgres::Postgres(), user = "u2tnmv2ufe7rpk", password = "p899046d336be15351280fd542015420a8e18e22dfe07c1cccaaa8e0e9fb20631", host = "cdgn4ufq38ipd0.cluster-czz5s0kz4scl.eu-west-1.rds.amazonaws.com", port = 5432, dbname = "d6qh1puq26hrth"))
-          order_description <- dbGetQuery(con(), paste0("SELECT itemdescription FROM orders WHERE id = ",orderid,";"))$itemdescription
-        })
+        order_description <- get_query(paste0("SELECT itemdescription FROM orders WHERE id = ",orderid,";"))$itemdescription
         header1 <- list(
           'type' = 'document',
           'document' = list(
@@ -642,24 +495,10 @@ handle_wa_button <- function(button_details, invoiceName=NULL) {
         body_params2 <- list(
           list('type' = 'text', 'text' = as.character(sent_wa$orderid))
         )
-        admin <- tryCatch({
-          admin <- dbGetQuery(con(), paste0("SELECT wa_number FROM active_ts WHERE ai = 'true';"))$wa_number
-        }, 
-        error = function(e) {
-          dbDisconnect(isolate(con())) 
-          con(dbConnect(RPostgres::Postgres(), user = "u2tnmv2ufe7rpk", password = "p899046d336be15351280fd542015420a8e18e22dfe07c1cccaaa8e0e9fb20631", host = "cdgn4ufq38ipd0.cluster-czz5s0kz4scl.eu-west-1.rds.amazonaws.com", port = 5432, dbname = "d6qh1puq26hrth"))
-          admin <- dbGetQuery(con(), paste0("SELECT wa_number FROM active_ts WHERE ai = 'true';"))$wa_number
-        })
+        admin <- get_ai_wa()
         send_template(admin, body_params1, "quote_pmt_1", header1, project=sent_wa$project, orderid = orderid, docid = docID)
         send_template(admin, body_params2, "quote_pmt_2", header2, project=sent_wa$project, orderid = orderid, docid = button_details$attachmentid)
-        tryCatch({
-          dbExecute(con(), paste0("UPDATE orders SET status = 'Paid', lastupdate = '",format(Sys.Date(), format = "%d-%m-%Y"),"' WHERE id = ", orderid, ";"))
-        }, 
-        error = function(e) {
-          dbDisconnect(isolate(con())) 
-          con(dbConnect(RPostgres::Postgres(), user = "u2tnmv2ufe7rpk", password = "p899046d336be15351280fd542015420a8e18e22dfe07c1cccaaa8e0e9fb20631", host = "cdgn4ufq38ipd0.cluster-czz5s0kz4scl.eu-west-1.rds.amazonaws.com", port = 5432, dbname = "d6qh1puq26hrth"))
-          dbExecute(con(), paste0("UPDATE orders SET status = 'Paid', lastupdate = '",format(Sys.Date(), format = "%d-%m-%Y"),"' WHERE id = ", orderid, ";"))
-        })
+        execute(paste0("UPDATE orders SET status = 'Paid', lastupdate = '",format(Sys.Date(), format = "%d-%m-%Y"),"' WHERE id = ", orderid, ";"))
       }
     } else send_template(button_details$from, template_name = "unknown_request")
   }
@@ -667,46 +506,21 @@ handle_wa_button <- function(button_details, invoiceName=NULL) {
   else if (!is.na(button_details$text)) {
     
     if (button_details$text == "Task Completed") {
-      tryCatch({
-        tasks_ready_for_QC(dbGetQuery(con(), paste0("SELECT task FROM sent_wa WHERE id = '", button_details$contextid, "';"))$task)
-      }, 
-      error = function(e) {
-        dbDisconnect(isolate(con())) 
-        con(dbConnect(RPostgres::Postgres(), user = "u2tnmv2ufe7rpk", password = "p899046d336be15351280fd542015420a8e18e22dfe07c1cccaaa8e0e9fb20631", host = "cdgn4ufq38ipd0.cluster-czz5s0kz4scl.eu-west-1.rds.amazonaws.com", port = 5432, dbname = "d6qh1puq26hrth"))
-        tasks_ready_for_QC(dbGetQuery(con(), paste0("SELECT task FROM sent_wa WHERE id = '", button_details$contextid, "';"))$task)
-      })
+      execute(paste0("UPDATE sent_wa SET responded = 'true' WHERE id = '", button_details$contextid, "';"))
+      tasks_ready_for_QC(get_query(paste0("SELECT task FROM sent_wa WHERE id = '", button_details$contextid, "';"))$task)
     }
     
     else if (button_details$text == "QC Passed!") {
-      tryCatch({
-        task_QC_passed(dbGetQuery(con(), paste0("SELECT * FROM sent_wa WHERE id = '", button_details$contextid, "';")))
-      }, 
-      error = function(e) {
-        dbDisconnect(isolate(con())) 
-        con(dbConnect(RPostgres::Postgres(), user = "u2tnmv2ufe7rpk", password = "p899046d336be15351280fd542015420a8e18e22dfe07c1cccaaa8e0e9fb20631", host = "cdgn4ufq38ipd0.cluster-czz5s0kz4scl.eu-west-1.rds.amazonaws.com", port = 5432, dbname = "d6qh1puq26hrth"))
-        task_QC_passed(dbGetQuery(con(), paste0("SELECT * FROM sent_wa WHERE id = '", button_details$contextid, "';")))
-      })
+      execute(paste0("UPDATE sent_wa SET responded = 'true' WHERE id = '", button_details$contextid, "';"))
+      task_QC_passed(get_query(paste0("SELECT * FROM sent_wa WHERE id = '", button_details$contextid, "';")))
     }
     
     else if (button_details$text == "Approve Quote") {
-      sent_wa <- tryCatch({
-        sent_wa <- dbGetQuery(con(), paste0("SELECT * FROM sent_wa WHERE id = '",button_details$contextid,"';"))
-      }, 
-      error = function(e) {
-        dbDisconnect(isolate(con())) 
-        con(dbConnect(RPostgres::Postgres(), user = "u2tnmv2ufe7rpk", password = "p899046d336be15351280fd542015420a8e18e22dfe07c1cccaaa8e0e9fb20631", host = "cdgn4ufq38ipd0.cluster-czz5s0kz4scl.eu-west-1.rds.amazonaws.com", port = 5432, dbname = "d6qh1puq26hrth"))
-        sent_wa <- dbGetQuery(con(), paste0("SELECT * FROM sent_wa WHERE id = '",button_details$contextid,"';"))
-      })
+      execute(paste0("UPDATE sent_wa SET responded = 'true' WHERE id = '", button_details$contextid, "';"))
+      sent_wa <- get_query(paste0("SELECT * FROM sent_wa WHERE id = '",button_details$contextid,"';"))
       docID <- sent_wa$docid
       orderid <- sent_wa$orderid
-      order_description <- tryCatch({
-        order_description <- dbGetQuery(con(), paste0("SELECT itemdescription FROM orders WHERE id = ",orderid,";"))$itemdescription
-      }, 
-      error = function(e) {
-        dbDisconnect(isolate(con())) 
-        con(dbConnect(RPostgres::Postgres(), user = "u2tnmv2ufe7rpk", password = "p899046d336be15351280fd542015420a8e18e22dfe07c1cccaaa8e0e9fb20631", host = "cdgn4ufq38ipd0.cluster-czz5s0kz4scl.eu-west-1.rds.amazonaws.com", port = 5432, dbname = "d6qh1puq26hrth"))
-        order_description <- dbGetQuery(con(), paste0("SELECT itemdescription FROM orders WHERE id = ",orderid,";"))$itemdescription
-      })
+      order_description <- get_query(paste0("SELECT itemdescription FROM orders WHERE id = ",orderid,";"))$itemdescription
       header <- list(
         'type' = 'document',
         'document' = list(
@@ -718,44 +532,17 @@ handle_wa_button <- function(button_details, invoiceName=NULL) {
         list('type' = 'text', 'text' = as.character(orderid)),
         list('type' = 'text', 'text' = order_description)
       )
-      accounts <- tryCatch({
-        accounts <- dbGetQuery(con(), paste0("SELECT wa_number FROM active_ts WHERE ac = 'true';"))$wa_number
-      }, 
-      error = function(e) {
-        dbDisconnect(isolate(con())) 
-        con(dbConnect(RPostgres::Postgres(), user = "u2tnmv2ufe7rpk", password = "p899046d336be15351280fd542015420a8e18e22dfe07c1cccaaa8e0e9fb20631", host = "cdgn4ufq38ipd0.cluster-czz5s0kz4scl.eu-west-1.rds.amazonaws.com", port = 5432, dbname = "d6qh1puq26hrth"))
-        accounts <- dbGetQuery(con(), paste0("SELECT wa_number FROM active_ts WHERE ac = 'true';"))$wa_number
-      })
+      accounts <- get_ac_wa()
       send_template(accounts, body_params, "request_quote_pmt", header, project=sent_wa$project, orderid = orderid, docid = docID)
-      tryCatch({
-        dbExecute(con(), paste0("UPDATE orders SET status = 'Quote Approved', lastupdate = '",format(Sys.Date(), format = "%d-%m-%Y"),"' WHERE id = ", orderid, ";"))
-      }, 
-      error = function(e) {
-        dbDisconnect(isolate(con())) 
-        con(dbConnect(RPostgres::Postgres(), user = "u2tnmv2ufe7rpk", password = "p899046d336be15351280fd542015420a8e18e22dfe07c1cccaaa8e0e9fb20631", host = "cdgn4ufq38ipd0.cluster-czz5s0kz4scl.eu-west-1.rds.amazonaws.com", port = 5432, dbname = "d6qh1puq26hrth"))
-        dbExecute(con(), paste0("UPDATE orders SET status = 'Quote Approved', lastupdate = '",format(Sys.Date(), format = "%d-%m-%Y"),"' WHERE id = ", orderid, ";"))
-      })
+      execute(paste0("UPDATE orders SET status = 'Quote Approved', lastupdate = '",format(Sys.Date(), format = "%d-%m-%Y"),"' WHERE id = ", orderid, ";"))
     }
     
     else if (button_details$text == "Proceed Without Payment") {
-      sent_wa <- tryCatch({
-        sent_wa <- dbGetQuery(con(), paste0("SELECT * FROM sent_wa WHERE id = '",button_details$contextid,"';"))
-      }, 
-      error = function(e) {
-        dbDisconnect(isolate(con())) 
-        con(dbConnect(RPostgres::Postgres(), user = "u2tnmv2ufe7rpk", password = "p899046d336be15351280fd542015420a8e18e22dfe07c1cccaaa8e0e9fb20631", host = "cdgn4ufq38ipd0.cluster-czz5s0kz4scl.eu-west-1.rds.amazonaws.com", port = 5432, dbname = "d6qh1puq26hrth"))
-        sent_wa <- dbGetQuery(con(), paste0("SELECT * FROM sent_wa WHERE id = '",button_details$contextid,"';"))
-      })
+      execute(paste0("UPDATE sent_wa SET responded = 'true' WHERE id = '", button_details$contextid, "';"))
+      sent_wa <- get_query(paste0("SELECT * FROM sent_wa WHERE id = '",button_details$contextid,"';"))
       docID <- sent_wa$docid
       orderid <- sent_wa$orderid
-      order_description <- tryCatch({
-        order_description <- dbGetQuery(con(), paste0("SELECT itemdescription FROM orders WHERE id = ",orderid,";"))$itemdescription
-      }, 
-      error = function(e) {
-        dbDisconnect(isolate(con())) 
-        con(dbConnect(RPostgres::Postgres(), user = "u2tnmv2ufe7rpk", password = "p899046d336be15351280fd542015420a8e18e22dfe07c1cccaaa8e0e9fb20631", host = "cdgn4ufq38ipd0.cluster-czz5s0kz4scl.eu-west-1.rds.amazonaws.com", port = 5432, dbname = "d6qh1puq26hrth"))
-        order_description <- dbGetQuery(con(), paste0("SELECT itemdescription FROM orders WHERE id = ",orderid,";"))$itemdescription
-      })
+      order_description <- get_query(paste0("SELECT itemdescription FROM orders WHERE id = ",orderid,";"))$itemdescription
       header <- list(
         'type' = 'document',
         'document' = list(
@@ -766,77 +553,29 @@ handle_wa_button <- function(button_details, invoiceName=NULL) {
         list('type' = 'text', 'text' = as.character(sent_wa$orderid)),
         list('type' = 'text', 'text' = order_description)
       )
-      admin <- tryCatch({
-        admin <- dbGetQuery(con(), paste0("SELECT wa_number FROM active_ts WHERE ai = 'true';"))$wa_number
-      }, 
-      error = function(e) {
-        dbDisconnect(isolate(con())) 
-        con(dbConnect(RPostgres::Postgres(), user = "u2tnmv2ufe7rpk", password = "p899046d336be15351280fd542015420a8e18e22dfe07c1cccaaa8e0e9fb20631", host = "cdgn4ufq38ipd0.cluster-czz5s0kz4scl.eu-west-1.rds.amazonaws.com", port = 5432, dbname = "d6qh1puq26hrth"))
-        admin <- dbGetQuery(con(), paste0("SELECT wa_number FROM active_ts WHERE ai = 'true';"))$wa_number
-      })
+      admin <- get_ai_wa()
       send_template(admin, body_params, "quote_no_pmt", header, project=sent_wa$project, orderid = orderid, docid = docID)
-      tryCatch({
-        dbExecute(con(), paste0("UPDATE orders SET status = 'Order Go Ahead', lastupdate = '",format(Sys.Date(), format = "%d-%m-%Y"),"' WHERE id = ", orderid, ";"))
-      }, 
-      error = function(e) {
-        dbDisconnect(isolate(con())) 
-        con(dbConnect(RPostgres::Postgres(), user = "u2tnmv2ufe7rpk", password = "p899046d336be15351280fd542015420a8e18e22dfe07c1cccaaa8e0e9fb20631", host = "cdgn4ufq38ipd0.cluster-czz5s0kz4scl.eu-west-1.rds.amazonaws.com", port = 5432, dbname = "d6qh1puq26hrth"))
-        dbExecute(con(), paste0("UPDATE orders SET status = 'Order Go Ahead', lastupdate = '",format(Sys.Date(), format = "%d-%m-%Y"),"' WHERE id = ", orderid, ";"))
-      })
+      execute(paste0("UPDATE orders SET status = 'Order Go Ahead', lastupdate = '",format(Sys.Date(), format = "%d-%m-%Y"),"' WHERE id = ", orderid, ";"))
     }
     
     else if (button_details$text == "Complete Project") {
-      projectName <- tryCatch({
-        projectName <- dbGetQuery(con(), paste0("SELECT project FROM sent_wa WHERE id = '", button_details$contextid, "';"))$project
-      }, 
-      error = function(e) {
-        dbDisconnect(isolate(con())) 
-        con(dbConnect(RPostgres::Postgres(), user = "u2tnmv2ufe7rpk", password = "p899046d336be15351280fd542015420a8e18e22dfe07c1cccaaa8e0e9fb20631", host = "cdgn4ufq38ipd0.cluster-czz5s0kz4scl.eu-west-1.rds.amazonaws.com", port = 5432, dbname = "d6qh1puq26hrth"))
-        projectName <- dbGetQuery(con(), paste0("SELECT project FROM sent_wa WHERE id = '", button_details$contextid, "';"))$project
-      })
-      tryCatch({
-        dbExecute(con(), paste0("UPDATE projects SET status = 'To be Invoiced', lastupdate = '",format(Sys.Date(), format = "%d-%m-%Y"),
+      execute(paste0("UPDATE sent_wa SET responded = 'true' WHERE id = '", button_details$contextid, "';"))
+      projectName <- get_query(paste0("SELECT project FROM sent_wa WHERE id = '", button_details$contextid, "';"))$project
+      execute(paste0("UPDATE projects SET status = 'To be Invoiced', lastupdate = '",format(Sys.Date(), format = "%d-%m-%Y"),
                                 "' WHERE projectname = '", projectName, "';"))
-      }, 
-      error = function(e) {
-        dbDisconnect(isolate(con())) 
-        con(dbConnect(RPostgres::Postgres(), user = "u2tnmv2ufe7rpk", password = "p899046d336be15351280fd542015420a8e18e22dfe07c1cccaaa8e0e9fb20631", host = "cdgn4ufq38ipd0.cluster-czz5s0kz4scl.eu-west-1.rds.amazonaws.com", port = 5432, dbname = "d6qh1puq26hrth"))
-        dbExecute(con(), paste0("UPDATE projects SET status = 'To be Invoiced', lastupdate = '",format(Sys.Date(), format = "%d-%m-%Y"),
-                                "' WHERE projectname = '", projectName, "';"))
-      })
       
       body <- list(
         list("type" = "text", "text" = projectName)
       )
-      admin <- tryCatch({
-        admin <- dbGetQuery(con(), paste0("SELECT wa_number FROM active_ts WHERE ai = 'true';"))$wa_number
-      }, 
-      error = function(e) {
-        dbDisconnect(isolate(con())) 
-        con(dbConnect(RPostgres::Postgres(), user = "u2tnmv2ufe7rpk", password = "p899046d336be15351280fd542015420a8e18e22dfe07c1cccaaa8e0e9fb20631", host = "cdgn4ufq38ipd0.cluster-czz5s0kz4scl.eu-west-1.rds.amazonaws.com", port = 5432, dbname = "d6qh1puq26hrth"))
-        admin <- dbGetQuery(con(), paste0("SELECT wa_number FROM active_ts WHERE ai = 'true';"))$wa_number
-      })
+      admin <- get_ai_wa()
       send_template(admin, body, "start_invoice", project = projectName)
-      md <- tryCatch({
-        md <- dbGetQuery(con(), paste0("SELECT wa_number FROM active_ts WHERE md = 'true';"))$wa_number
-      }, 
-      error = function(e) {
-        dbDisconnect(isolate(con())) 
-        con(dbConnect(RPostgres::Postgres(), user = "u2tnmv2ufe7rpk", password = "p899046d336be15351280fd542015420a8e18e22dfe07c1cccaaa8e0e9fb20631", host = "cdgn4ufq38ipd0.cluster-czz5s0kz4scl.eu-west-1.rds.amazonaws.com", port = 5432, dbname = "d6qh1puq26hrth"))
-        md <- dbGetQuery(con(), paste0("SELECT wa_number FROM active_ts WHERE md = 'true';"))$wa_number
-      })
+      md <- get_md_wa()
       send_template(md, body, template_name = 'md_project_completed', project = projectName)
     }
     
     else if (button_details$text == "Approve Invoice") {
-      sent_WA <- tryCatch({
-        sent_WA <- dbGetQuery(con(), paste0("SELECT * FROM sent_wa WHERE id = '",button_details$contextid,"';"))
-      }, 
-      error = function(e) {
-        dbDisconnect(isolate(con())) 
-        con(dbConnect(RPostgres::Postgres(), user = "u2tnmv2ufe7rpk", password = "p899046d336be15351280fd542015420a8e18e22dfe07c1cccaaa8e0e9fb20631", host = "cdgn4ufq38ipd0.cluster-czz5s0kz4scl.eu-west-1.rds.amazonaws.com", port = 5432, dbname = "d6qh1puq26hrth"))
-        sent_WA <- dbGetQuery(con(), paste0("SELECT * FROM sent_wa WHERE id = '",button_details$contextid,"';"))
-      })
+      execute(paste0("UPDATE sent_wa SET responded = 'true' WHERE id = '", button_details$contextid, "';"))
+      sent_WA <- get_query(paste0("SELECT * FROM sent_wa WHERE id = '",button_details$contextid,"';"))
       header <- list(
         'type' = 'document',
         'document' = list(
@@ -844,38 +583,22 @@ handle_wa_button <- function(button_details, invoiceName=NULL) {
           'filename' = paste0(sent_WA$invoicename, ".pdf")
         )
       )
-      if (button_details$fromid == dbGetQuery(con(), paste0("SELECT wa_number FROM active_ts WHERE pm = 'true';"))$wa_number) {
+      if (button_details$fromid == get_ac_wa()) {
         body_params <- list(list('type' = 'text', 'text' = sent_WA$project))
-        main_director <- tryCatch({
-          main_director <- dbGetQuery(con(), paste0("SELECT wa_number FROM active_ts WHERE md = 'true';"))$wa_number
-        }, 
-        error = function(e) {
-          dbDisconnect(isolate(con())) 
-          con(dbConnect(RPostgres::Postgres(), user = "u2tnmv2ufe7rpk", password = "p899046d336be15351280fd542015420a8e18e22dfe07c1cccaaa8e0e9fb20631", host = "cdgn4ufq38ipd0.cluster-czz5s0kz4scl.eu-west-1.rds.amazonaws.com", port = 5432, dbname = "d6qh1puq26hrth"))
-          main_director <- dbGetQuery(con(), paste0("SELECT wa_number FROM active_ts WHERE md = 'true';"))$wa_number
-        })
+        pm <- get_pm_wa()
+        send_template(pm, body_params, "invoice_approval", heading = header, project = sent_WA$project, docid = sent_WA$docid, invoicename = sent_WA$invoicename)
+        execute(paste0("UPDATE projects SET status = 'Invoice Sent to Deneys', lastupdate = '",format(Sys.Date(), format = "%d-%m-%Y"),
+                                  "' WHERE projectname = '", sent_WA$project, "';"))
+      } else if (button_details$fromid == get_pm_wa()) {
+        body_params <- list(list('type' = 'text', 'text' = sent_WA$project))
+        main_director <- get_query(paste0("SELECT wa_number FROM active_ts WHERE md = 'true';"))$wa_number
         send_template(main_director, body_params, "invoice_approval", heading = header, project = sent_WA$project, docid = sent_WA$docid, invoicename = sent_WA$invoicename)
-        tryCatch({
-          dbExecute(con(), paste0("UPDATE projects SET status = 'Invoice Sent to Sven', lastupdate = '",format(Sys.Date(), format = "%d-%m-%Y"),
-                                  "' WHERE projectname = '", sent_WA$project, "';"))        }, 
-        error = function(e) {
-          dbDisconnect(isolate(con())) 
-          con(dbConnect(RPostgres::Postgres(), user = "u2tnmv2ufe7rpk", password = "p899046d336be15351280fd542015420a8e18e22dfe07c1cccaaa8e0e9fb20631", host = "cdgn4ufq38ipd0.cluster-czz5s0kz4scl.eu-west-1.rds.amazonaws.com", port = 5432, dbname = "d6qh1puq26hrth"))
-          dbExecute(con(), paste0("UPDATE projects SET status = 'Invoice Sent to Sven', lastupdate = '",format(Sys.Date(), format = "%d-%m-%Y"),
-                                  "' WHERE projectname = '", sent_WA$project, "';"))        })
+        execute(paste0("UPDATE projects SET status = 'Invoice Sent to Sven', lastupdate = '",format(Sys.Date(), format = "%d-%m-%Y"),
+                                  "' WHERE projectname = '", sent_WA$project, "';")) 
       } else {
-        invoice_data <- (get_from_api(
-          "TaxInvoice", 
-          query_params = paste0("$filter=DocumentNumber eq '",sent_WA$invoicename,"'&includeDetail=False&includeCustomerDetails=True&") 
+        invoice_data <- (get_from_api("TaxInvoice", query_params = paste0("$filter=DocumentNumber eq '",sent_WA$invoicename,"'&includeDetail=False&includeCustomerDetails=True&") 
         ))
-        admin <- tryCatch({
-          admin <- dbGetQuery(con(), paste0("SELECT wa_number FROM active_ts WHERE ai = 'true';"))$wa_number
-        }, 
-        error = function(e) {
-          dbDisconnect(isolate(con())) 
-          con(dbConnect(RPostgres::Postgres(), user = "u2tnmv2ufe7rpk", password = "p899046d336be15351280fd542015420a8e18e22dfe07c1cccaaa8e0e9fb20631", host = "cdgn4ufq38ipd0.cluster-czz5s0kz4scl.eu-west-1.rds.amazonaws.com", port = 5432, dbname = "d6qh1puq26hrth"))
-          admin <- dbGetQuery(con(), paste0("SELECT wa_number FROM active_ts WHERE ai = 'true';"))$wa_number
-        })
+        admin <- get_ai_wa()
         if (invoice_data$TotalResults > 0) {
           invoiceID <- invoice_data$Results$ID
           if (is.null(invoice_data$Results$Customer$Mobile) || invoice_data$Results$Customer$Mobile == "") {
@@ -902,14 +625,8 @@ handle_wa_button <- function(button_details, invoiceName=NULL) {
                               list('type' = 'text', 'text' = "Unable to find the invoice on Sage."))
           send_template(admin, body_params = body_params, template_name = "invoice_failed", project = sent_WA$project, body_params = body_params, invoicename = sent_WA$invoicename)
         }
-        tryCatch({
-          dbExecute(con(), paste0("UPDATE projects SET status = 'Invoiced', lastupdate = '",format(Sys.Date(), format = "%d-%m-%Y"),
-                                "' WHERE projectname = '", sent_WA$project, "';"))        }, 
-        error = function(e) {
-          dbDisconnect(isolate(con())) 
-          con(dbConnect(RPostgres::Postgres(), user = "u2tnmv2ufe7rpk", password = "p899046d336be15351280fd542015420a8e18e22dfe07c1cccaaa8e0e9fb20631", host = "cdgn4ufq38ipd0.cluster-czz5s0kz4scl.eu-west-1.rds.amazonaws.com", port = 5432, dbname = "d6qh1puq26hrth"))
-          dbExecute(con(), paste0("UPDATE projects SET status = 'Invoiced', lastupdate = '",format(Sys.Date(), format = "%d-%m-%Y"),
-                                "' WHERE projectname = '", sent_WA$project, "';"))        })
+        execute(paste0("UPDATE projects SET status = 'Invoiced', lastupdate = '",format(Sys.Date(), format = "%d-%m-%Y"),
+                                "' WHERE projectname = '", sent_WA$project, "';"))
       }
     } else send_template(button_details$from, template_name = "unknown_request")
   } else send_template(button_details$from, template_name = "unknown_request")
@@ -920,15 +637,9 @@ get_WA_number <- function(number) {
   return(wa_number)
 }
 
-send_invoice_to_PM <- function(message_details) {
-  projectName <- tryCatch({
-    projectName <- dbGetQuery(con(), paste0("SELECT project FROM sent_wa WHERE id = '", message_details$contextid, "';"))$project
-  }, 
-  error = function(e) {
-    dbDisconnect(isolate(con())) 
-    con(dbConnect(RPostgres::Postgres(), user = "u2tnmv2ufe7rpk", password = "p899046d336be15351280fd542015420a8e18e22dfe07c1cccaaa8e0e9fb20631", host = "cdgn4ufq38ipd0.cluster-czz5s0kz4scl.eu-west-1.rds.amazonaws.com", port = 5432, dbname = "d6qh1puq26hrth"))
-    projectName <- dbGetQuery(con(), paste0("SELECT project FROM sent_wa WHERE id = '", message_details$contextid, "';"))$project
-  })
+send_invoice_to_AC <- function(message_details) {
+  execute(paste0("UPDATE sent_wa SET responded = 'true' WHERE id = '", message_details$contextid, "';"))
+  projectName <- get_query(paste0("SELECT project FROM sent_wa WHERE id = '", message_details$contextid, "';"))$project
   invoice_data <- (get_from_api(
     "TaxInvoice", 
     query_params = paste0("$filter=DocumentNumber eq '",message_details$text,"'&includeDetail=False&includeCustomerDetails=False&") 
@@ -965,36 +676,16 @@ send_invoice_to_PM <- function(message_details) {
       )
       
       body_params <- list(list('type' = 'text', 'text' = projectName))
-      pm <- tryCatch({
-        pm <- dbGetQuery(con(), paste0("SELECT wa_number FROM active_ts WHERE pm = 'true';"))$wa_number
-      }, 
-      error = function(e) {
-        dbDisconnect(isolate(con())) 
-        con(dbConnect(RPostgres::Postgres(), user = "u2tnmv2ufe7rpk", password = "p899046d336be15351280fd542015420a8e18e22dfe07c1cccaaa8e0e9fb20631", host = "cdgn4ufq38ipd0.cluster-czz5s0kz4scl.eu-west-1.rds.amazonaws.com", port = 5432, dbname = "d6qh1puq26hrth"))
-        pm <- dbGetQuery(con(), paste0("SELECT wa_number FROM active_ts WHERE pm = 'true';"))$wa_number
-      })
-      send_template(pm, body_params, "invoice_approval", heading = header, project = projectName, docid = docID, invoicename = message_details$text)
+      ac <- get_ac_wa()
+      send_template(ac, body_params, "invoice_approval", heading = header, project = projectName, docid = docID, invoicename = message_details$text)
     }} else {
       body_params <- list(list('type' = 'text', 'text' = message_details$text),
                           list('type' = 'text', 'text' = "Unable to find the invoice on Sage."))
-      admin <- tryCatch({
-        admin <- dbGetQuery(con(), paste0("SELECT wa_number FROM active_ts WHERE ai = 'true';"))$wa_number
-      }, 
-      error = function(e) {
-        dbDisconnect(isolate(con())) 
-        con(dbConnect(RPostgres::Postgres(), user = "u2tnmv2ufe7rpk", password = "p899046d336be15351280fd542015420a8e18e22dfe07c1cccaaa8e0e9fb20631", host = "cdgn4ufq38ipd0.cluster-czz5s0kz4scl.eu-west-1.rds.amazonaws.com", port = 5432, dbname = "d6qh1puq26hrth"))
-        admin <- dbGetQuery(con(), paste0("SELECT wa_number FROM active_ts WHERE ai = 'true';"))$wa_number
-      })
+      admin <- get_ai_wa()
       send_template(admin, template_name = "invoice_failed", project = projectName, body_params = body_params, invoicename = message_details$text)
     }
-  tryCatch({
-    dbExecute(con(), paste0("UPDATE projects SET status = 'Invoice Sent to PM', lastupdate = '",format(Sys.Date(), format = "%d-%m-%Y"),
-                            "' WHERE projectname = '", projectName, "';"))  }, 
-  error = function(e) {
-    dbDisconnect(isolate(con())) 
-    con(dbConnect(RPostgres::Postgres(), user = "u2tnmv2ufe7rpk", password = "p899046d336be15351280fd542015420a8e18e22dfe07c1cccaaa8e0e9fb20631", host = "cdgn4ufq38ipd0.cluster-czz5s0kz4scl.eu-west-1.rds.amazonaws.com", port = 5432, dbname = "d6qh1puq26hrth"))
-    dbExecute(con(), paste0("UPDATE projects SET status = 'Invoice Sent to PM', lastupdate = '",format(Sys.Date(), format = "%d-%m-%Y"),
-                            "' WHERE projectname = '", projectName, "';"))  })
+  execute(paste0("UPDATE projects SET status = 'Invoice Sent to PM', invoiceno = '",message_details$text,"', lastupdate = '",format(Sys.Date(), format = "%d-%m-%Y"),
+                            "' WHERE projectname = '", projectName, "';"))
 }
 
 send_invoice_to_customer <- function(invoiceNo, invoiceID, wa_id, customerName, projectName) {
@@ -1037,34 +728,13 @@ send_invoice_to_customer <- function(invoiceNo, invoiceID, wa_id, customerName, 
 }
 
 get_active_projects <- function() {      
-  active_proj <- tryCatch({
-    active_proj <- dbGetQuery(con(), paste0("SELECT projectid FROM projects WHERE status IN ('Not Started', 'In Progress');"))$projectid
-  }, 
-  error = function(e) {
-    dbDisconnect(isolate(con())) 
-    con(dbConnect(RPostgres::Postgres(), user = "u2tnmv2ufe7rpk", password = "p899046d336be15351280fd542015420a8e18e22dfe07c1cccaaa8e0e9fb20631", host = "cdgn4ufq38ipd0.cluster-czz5s0kz4scl.eu-west-1.rds.amazonaws.com", port = 5432, dbname = "d6qh1puq26hrth"))
-    active_proj <- dbGetQuery(con(), paste0("SELECT projectid FROM projects WHERE status IN ('Not Started', 'In Progress');"))$projectid
-  })
+  active_proj <- get_query(paste0("SELECT projectid FROM projects WHERE status IN ('Not Started', 'In Progress');"))$projectid
   projects <- get_projects(get_from_api("TimeTrackingProject","GetActiveProjects")) %>% filter(ID %in% active_proj)
 }
 
 forward_image <- function(df, from) {
-  pm <- tryCatch({
-    pm <- dbGetQuery(con(), paste0("SELECT wa_number FROM active_ts WHERE pm = 'true';"))$wa_number
-  }, 
-  error = function(e) {
-    dbDisconnect(isolate(con())) 
-    con(dbConnect(RPostgres::Postgres(), user = "u2tnmv2ufe7rpk", password = "p899046d336be15351280fd542015420a8e18e22dfe07c1cccaaa8e0e9fb20631", host = "cdgn4ufq38ipd0.cluster-czz5s0kz4scl.eu-west-1.rds.amazonaws.com", port = 5432, dbname = "d6qh1puq26hrth"))
-    pm <- dbGetQuery(con(), paste0("SELECT wa_number FROM active_ts WHERE pm = 'true';"))$wa_number
-  })
-  md <- tryCatch({
-    md <- dbGetQuery(con(), paste0("SELECT wa_number FROM active_ts WHERE md = 'true';"))$wa_number
-  }, 
-  error = function(e) {
-    dbDisconnect(isolate(con())) 
-    con(dbConnect(RPostgres::Postgres(), user = "u2tnmv2ufe7rpk", password = "p899046d336be15351280fd542015420a8e18e22dfe07c1cccaaa8e0e9fb20631", host = "cdgn4ufq38ipd0.cluster-czz5s0kz4scl.eu-west-1.rds.amazonaws.com", port = 5432, dbname = "d6qh1puq26hrth"))
-    md <- dbGetQuery(con(), paste0("SELECT wa_number FROM active_ts WHERE md = 'true';"))$wa_number
-  })
+  pm <- get_pm_wa()
+  md <- get_md_wa()
   header <- list('type' = 'image', 'image' = list('id' = df$attachmentid))
   projectName <- df$text
   body <- list(
