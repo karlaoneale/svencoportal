@@ -10,6 +10,15 @@ server <- function(input, output, session) {
   tasks_sheet <- reactiveVal()
   orders_data <- reactiveVal()
   
+  
+  # Timer for connection of postgres every 30 mins
+  syncProj <- reactiveTimer(1000*60*30)
+  
+  observe({
+    syncProj()
+    sync_invoices_and_projects()
+  })
+  
   observe({
     autoInvalidate()
     new_webhooks(get_new_webhooks())
@@ -58,7 +67,7 @@ server <- function(input, output, session) {
                 select(-projectid) %>%
                 mutate(images = ifelse(images != "", paste0("<a href='", images,"' target='_blank'>View</a>"), images),
                        active = ifelse(active, "&#10004;", "&#10060;")),
-              colnames = c("Project Name", "Customer", "Status", "Added", "Last Update", "Invoice No.", "Images", "Notes", "Active"),
+              colnames = c("Project Name", "Customer", "Status", "Added", "Last Update", "Invoice No.", "Images", "Notes", "Active", "Pmt Status"),
               escape = FALSE)
   })
   

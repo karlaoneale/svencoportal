@@ -263,7 +263,7 @@ get_new_webhooks <- function() {
             )
             if (grepl("^N[0-9]{4}.*$", df$text)) { 
               add_note(df)
-            } else if (grepl("^INV\\d{6}$", df$text)) {
+            } else if (grepl("^INV\\d{5}$", df$text)) {
               send_invoice_to_AC(df)
             } else if (grepl("^P[0-9]{4}.*$", df$text)) {
               create_order(df)
@@ -388,12 +388,13 @@ create_order <- function(message_details, drive_link = NULL) {
   projectName <- get_query(paste0("SELECT projectname FROM projects WHERE projectname LIKE '", projNumber, "%';"))$projectname
   
   if (is.null(drive_link)) {
-    execute(paste0("INSERT INTO orders (id, datesubmitted, itemdescription, submittedby, project, status, lastupdate) VALUES (",lastid+1,",'",format(Sys.Date(), format = "%d-%m-%Y"),"', '",itemDescription, "', '", from,
+    execute(paste0("INSERT INTO orders (id, datesubmitted, itemdescription, submittedby, project, status, lastupdate) 
+                   VALUES (",lastid+1,",'",format(Sys.Date(), format = "%d-%m-%Y"),"', '",itemDescription, "', '", from,
                               "', '",projectName,"', 'Requested', '",format(Sys.Date(), format = "%d-%m-%Y"),"');"))  
   } else {
     execute(paste0("INSERT INTO orders (id, datesubmitted, itemdescription, submittedby, project, status, lastupdate, images) 
-                            VALUES (",last_id+1,",'",format(Sys.Date(), format = "%d-%m-%Y"),"', '",itemDescription, "', '", from,
-                              "', '",projectName,"', 'Requested', '",format(Sys.Date(), format = "%d-%m-%Y"),"', '",drive_link,"') RETURNING id;"))
+                    VALUES (",lastid+1,",'",format(Sys.Date(), format = "%d-%m-%Y"),"', '",itemDescription, "', '", from,
+                              "', '",projectName,"', 'Requested', '",format(Sys.Date(), format = "%d-%m-%Y"),"', '",drive_link,"');"))
   }
   orderid <- get_query("SELECT * FROM orders ORDER BY id DESC LIMIT 1")$id
   
@@ -650,6 +651,41 @@ handle_wa_button <- function(button_details, invoiceName=NULL) {
 get_WA_number <- function(number) {
   wa_number <- paste0("27", substr(number, 2, nchar(number)))
   return(wa_number)
+}
+
+sync_invoices_and_projects <- function() {
+  print("Start of invoices sync")
+  invoice_data <- (get_from_api("TaxInvoice", query_params = paste0("includeDetail=False&includeCustomerDetails=False&") ))
+  
+  if (invoice_data$TotalResults > 0) {
+    invoices <- data.frame(
+      "project" = substr(invoice_data$Results$Reference,1, 4),
+      "invoiceno" = invoice_data$Results$DocumentNumber,
+      "invoice_status" = invoice_data$Results$Status,
+      "customer" = invoice_data$Results$CustomerName
+    )
+    projects <- get_query("SELECT projectname, customer, invoiceno, invoice_status FROM projects;") %>%
+      mutate("project" = substr(projectname, 1,4))
+    merged_projects <- merge(projects, invoices, by = c("project", "customer"), all.x = TRUE) %>%
+      filter((is.na(invoiceno.x) & !is.na(invoiceno.y)) | (is.na(invoice_status.x) & !is.na(invoice_status.y)) | invoiceno.y != invoiceno.x | invoice_status.x != invoice_status.y)
+    if (nrow(merged_projects)>0) {
+      for (i in 1:nrow(merged_projects)) {
+        execute(paste0("UPDATE projects SET invoiceno = '", merged_projects$invoiceno.y[i], "', invoice_status = '", merged_projects$invoice_status.y[i], "' WHERE projectname = '",merged_projects$projectname[i],"';"))
+        pm <- get_pm_wa()
+        md <- get_md_wa()
+        body <- list(
+          list('type'='text', 'text'=merged_projects$invoiceno.y[i]),
+          list('type'='text', 'text'=merged_projects$projectname[i]),
+          list('type'='text', 'text'=merged_projects$invoice_status.y[i])
+        )
+        send_template(pm, body, 'project_invoice_update', project = merged_projects$projectname[i], invoicename = merged_projects$invoiceno.y[i])
+        send_template(md, body, 'project_invoice_update', project = merged_projects$projectname[i], invoicename = merged_projects$invoiceno.y[i])
+      }
+    }
+  }
+  if (!is.null(merged_projects)) n <- nrow(merged_projects)
+  else n <- 0
+  print(paste0("End of invoices sync: ", n))
 }
 
 send_invoice_to_AC <- function(message_details) {
