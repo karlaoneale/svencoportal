@@ -558,6 +558,21 @@ handle_wa_button <- function(button_details, invoiceName=NULL) {
       execute(paste0("UPDATE orders SET status = 'Order Go Ahead', lastupdate = '",format(Sys.Date(), format = "%d-%m-%Y"),"' WHERE id = ", orderid, ";"))
     }
     
+    else if (button_details$text == "Approve Purchase") {
+      execute(paste0("UPDATE sent_wa SET responded = 'true' WHERE id = '", button_details$contextid, "';"))
+      sent_wa <- get_query(paste0("SELECT * FROM sent_wa WHERE id = '",button_details$contextid,"';"))
+      orderid <- sent_wa$orderid
+      order_description <- get_query(paste0("SELECT itemdescription FROM orders WHERE id = ",orderid,";"))$itemdescription
+      body_params <- list(
+        list('type' = 'text', 'text' = sent_wa$project),
+        list('type' = 'text', 'text' = as.character(sent_wa$orderid)),
+        list('type' = 'text', 'text' = order_description)
+      )
+      admin <- get_ap_wa()
+      send_template(admin, body_params, "purchase_approval", project=sent_wa$project, orderid = orderid)
+      execute(paste0("UPDATE orders SET status = 'Purchase Go Ahead', lastupdate = '",format(Sys.Date(), format = "%d-%m-%Y"),"' WHERE id = ", orderid, ";"))
+    }
+    
     else if (button_details$text == "Complete Project") {
       execute(paste0("UPDATE sent_wa SET responded = 'true' WHERE id = '", button_details$contextid, "';"))
       projectName <- get_query(paste0("SELECT project FROM sent_wa WHERE id = '", button_details$contextid, "';"))$project

@@ -298,15 +298,6 @@ server <- function(input, output, session) {
                 options = daterangepickerOptions(singleDatePicker = TRUE)
               )
             ),
-            div(
-              style = "display:inline-block",
-              checkboxInput(
-                "set_as_ordered",
-                "Mark as ordered.",
-                value = TRUE,
-                width = "270px"
-              )
-            ),
             size = "s",
             easyClose = FALSE,
             footer = div(
@@ -374,29 +365,21 @@ server <- function(input, output, session) {
   })
   
   observeEvent(input$update_order_to_ordered,{
-    if (input$set_as_ordered) {
-      execute(paste0("UPDATE orders SET status = 'Ordered', lastupdate = '",
-                                format(Sys.Date(), format = "%d-%m-%Y"), "', courier = '",
-                                input$order_courier, "', eta = '", format(input$order_eta[1], format = "%d-%m-%Y"),
-                                "' WHERE id = ", orders_selected_row()$id, ";"))
-      wa_id <- get_query(paste0("SELECT wa_number FROM active_ts WHERE name = '",orders_selected_row()$submittedby,"';"))$wa_number
-      body_params <- list(
-        list('type' = 'text', 'text' = orders_selected_row()$id),
-        list('type' = 'text', 'text' = orders_selected_row()$itemdescription),
-        list('type' = 'text', 'text' = format(input$order_eta[1], format = "%d %b"))
-      )
-      send_template(wa_id, body_params = body_params, template_name = 'ordered', project = orders_selected_row()$project, orderid = orders_selected_row()$id)
-      pm <- get_pm_wa()
-      if (pm != wa_id) send_template(pm, body_params = body_params, template_name = 'ordered', project = orders_selected_row()$project, orderid = orders_selected_row()$id)
-      
-      
-    }
-    else {
-      execute(paste0("UPDATE orders SET lastupdate = '",
-                                format(Sys.Date(), format = "%d-%m-%Y"), "', courier = '",
-                                input$order_courier, "', eta = '", format(input$order_eta[1], format = "%d-%m-%Y"),
-                                "' WHERE id = ", orders_selected_row()$id, ";"))
-    }
+    execute(paste0("UPDATE sent_wa SET responded = 'true' WHERE messasge = 'quote_no_pmt' AND orderid = '", orders_selected_row()$id, "';"))
+    
+    execute(paste0("UPDATE orders SET status = 'Ordered', lastupdate = '",
+                              format(Sys.Date(), format = "%d-%m-%Y"), "', courier = '",
+                              input$order_courier, "', eta = '", format(input$order_eta[1], format = "%d-%m-%Y"),
+                              "' WHERE id = ", orders_selected_row()$id, ";"))
+    wa_id <- get_query(paste0("SELECT wa_number FROM active_ts WHERE name = '",orders_selected_row()$submittedby,"';"))$wa_number
+    body_params <- list(
+      list('type' = 'text', 'text' = orders_selected_row()$id),
+      list('type' = 'text', 'text' = orders_selected_row()$itemdescription),
+      list('type' = 'text', 'text' = format(input$order_eta[1], format = "%d %b"))
+    )
+    send_template(wa_id, body_params = body_params, template_name = 'ordered', project = orders_selected_row()$project, orderid = orders_selected_row()$id)
+    pm <- get_pm_wa()
+    if (pm != wa_id) send_template(pm, body_params = body_params, template_name = 'ordered', project = orders_selected_row()$project, orderid = orders_selected_row()$id)
     if (input$include_received) {
       orders_data(get_query("SELECT * FROM orders;") %>% arrange(desc(id)))
     }
@@ -412,6 +395,7 @@ server <- function(input, output, session) {
       if (input$order_amount == 0) {
         output$file_upload_error <- renderText({"Please enter an amount."})
       } else {
+        execute(paste0("UPDATE sent_wa SET responded = 'true' WHERE messasge = 'new_order' AND orderid = '", orders_selected_row()$id, "';"))
         ac <- get_ac_wa()
         body <- list(
           list("type" = "text", "text" = orders_selected_row()$project),
@@ -426,7 +410,9 @@ server <- function(input, output, session) {
     }
     else {
       if (nrow(input$quote_file) == 0) output$file_upload_error <- renderText({"No files were selected."})
-      else {
+      else {        
+        execute(paste0("UPDATE sent_wa SET responded = 'true' WHERE messasge = 'new_order' AND orderid = '", orders_selected_row()$id, "';"))
+
         drive_auth(path = google_drive_service_acc)
         path <- paste0("ProjectQuotes/",orders_selected_row()$id,"/")
         try(path <- drive_mkdir(as.character(orders_selected_row()$id), path = "ProjectQuotes/", overwrite = FALSE))
