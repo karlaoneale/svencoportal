@@ -332,7 +332,7 @@ server <- function(input, output, session) {
               )
             )
           ) %>% showModal()
-        } else if (orders_selected_row()$status == "Ordered") {
+        } else if (orders_selected_row()$status %in% c("Ordered",'Purchase Go Ahead')) {
           modalDialog(
             title = "Complete Order",
             size = "s",
