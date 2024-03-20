@@ -374,7 +374,7 @@ server <- function(input, output, session) {
   })
   
   observeEvent(input$update_order_to_ordered,{
-    execute(paste0("UPDATE sent_wa SET responded = 'true' WHERE messasge = 'quote_no_pmt' AND orderid = '", orders_selected_row()$id, "';"))
+    execute(paste0("UPDATE sent_wa SET responded = 'true' WHERE message = 'quote_no_pmt' AND orderid = '", orders_selected_row()$id, "';"))
     
     execute(paste0("UPDATE orders SET status = 'Ordered', lastupdate = '",
                               format(Sys.Date(), format = "%d-%m-%Y"), "', courier = '",
@@ -404,7 +404,7 @@ server <- function(input, output, session) {
       if (input$order_amount == 0) {
         output$file_upload_error <- renderText({"Please enter an amount."})
       } else {
-        execute(paste0("UPDATE sent_wa SET responded = 'true' WHERE messasge = 'new_order' AND orderid = '", orders_selected_row()$id, "';"))
+        execute(paste0("UPDATE sent_wa SET responded = 'true' WHERE message = 'new_order' AND orderid = '", orders_selected_row()$id, "';"))
         ac <- get_ac_wa()
         body <- list(
           list("type" = "text", "text" = orders_selected_row()$project),
@@ -420,7 +420,7 @@ server <- function(input, output, session) {
     else {
       if (nrow(input$quote_file) == 0) output$file_upload_error <- renderText({"No files were selected."})
       else {        
-        execute(paste0("UPDATE sent_wa SET responded = 'true' WHERE messasge = 'new_order' AND orderid = '", orders_selected_row()$id, "';"))
+        execute(paste0("UPDATE sent_wa SET responded = 'true' WHERE message = 'new_order' AND orderid = '", orders_selected_row()$id, "';"))
 
         drive_auth(path = google_drive_service_acc)
         path <- paste0("ProjectQuotes/",orders_selected_row()$id,"/")
