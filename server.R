@@ -11,8 +11,8 @@ server <- function(input, output, session) {
   orders_data <- reactiveVal()
   
   
-  # Timer for connection of postgres every 30 mins
-  syncProj <- reactiveTimer(1000*60*30)
+  # Timer for connection of postgres every 90 mins
+  syncProj <- reactiveTimer(1000*60*90)
   
   observe({
     syncProj()
@@ -128,10 +128,12 @@ server <- function(input, output, session) {
     projects <- proj_admin_table()[input$project_admin_table_rows_selected,]
     projectids <- paste("'", projects$projectid, "'", collapse = ", ")
     if (input$proj_status_update == "Invoiced") {
-      execute(paste0("UPDATE projects SET status = '", input$proj_status_update, "', invoiceno = '",input$proj_status_update_inv,"' WHERE projectid IN (", projectids, ");"))
+      execute(paste0("UPDATE projects SET status = '", input$proj_status_update, "', invoiceno = '",input$proj_status_update_inv,"', lastupdate = '",format(Sys.Date(), format = "%d-%m-%Y"),
+                     "' WHERE projectid IN (", projectids, ");"))
     }
     else {
-      execute(paste0("UPDATE projects SET status = '", input$proj_status_update, "' WHERE projectid IN (", projectids, ");"))
+      execute(paste0("UPDATE projects SET status = '", input$proj_status_update, "', lastupdate = '",format(Sys.Date(), format = "%d-%m-%Y"),
+                     "' WHERE projectid IN (", projectids, ");"))
       
       if (input$proj_status_update == "Ready for QC") {
         for (i in 1:nrow(projects)) {
@@ -156,6 +158,9 @@ server <- function(input, output, session) {
         }
       }
     }
+    proj_sheet <- get_query("SELECT * FROM projects")
+    if (input$show_only_incomplete_projects) proj_admin_table(proj_sheet %>% filter(status %in% c("Not Started", "In Progress", "Ready for QC", "To be Invoiced")) %>% arrange(desc(projectname)))
+    else proj_admin_table(proj_sheet %>% arrange(desc(projectname)))
     removeModal()
   })
   

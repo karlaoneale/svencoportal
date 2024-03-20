@@ -587,6 +587,8 @@ handle_wa_button <- function(button_details, invoiceName=NULL) {
       send_template(admin, body, "start_invoice", project = projectName)
       md <- get_md_wa()
       send_template(md, body, template_name = 'md_project_completed', project = projectName)
+      ac <- get_ac_wa()
+      send_template(ac, body, "ac_inv_notifications", project = projectName)
     }
     
     else if (button_details$text == "Approve Invoice") {
@@ -673,6 +675,7 @@ sync_invoices_and_projects <- function() {
         execute(paste0("UPDATE projects SET invoiceno = '", merged_projects$invoiceno.y[i], "', invoice_status = '", merged_projects$invoice_status.y[i], "' WHERE projectname = '",merged_projects$projectname[i],"';"))
         pm <- get_pm_wa()
         md <- get_md_wa()
+        ac <- get_ac_wa()
         body <- list(
           list('type'='text', 'text'=merged_projects$invoiceno.y[i]),
           list('type'='text', 'text'=merged_projects$projectname[i]),
@@ -680,6 +683,7 @@ sync_invoices_and_projects <- function() {
         )
         send_template(pm, body, 'project_invoice_update', project = merged_projects$projectname[i], invoicename = merged_projects$invoiceno.y[i])
         send_template(md, body, 'project_invoice_update', project = merged_projects$projectname[i], invoicename = merged_projects$invoiceno.y[i])
+        send_template(ac, body, 'project_invoice_update', project = merged_projects$projectname[i], invoicename = merged_projects$invoiceno.y[i])
       }
     }
   }
