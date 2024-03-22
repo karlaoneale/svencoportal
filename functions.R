@@ -171,7 +171,12 @@ send_template <- function(wa_id, body_params = NULL, template_name, heading = NU
     )
   )
   
-  response <- POST(url, encode = "json", body=body, add_headers("Authorization" = paste0("Bearer ",wa_token), "Content-Type" = "application/json"))
+  response <- tryCatch({
+    response <- POST(url, encode = "json", body=body, add_headers("Authorization" = paste0("Bearer ",wa_token), "Content-Type" = "application/json"))
+  }, 
+  error = function(e) {
+    response <- POST(url, encode = "json", body=body, add_headers("Authorization" = paste0("Bearer ",wa_token), "Content-Type" = "application/json"))
+  })
   
   # Check the response status
   status_code <- response$status_code
@@ -565,7 +570,6 @@ handle_wa_button <- function(button_details, invoiceName=NULL) {
       orderid <- sent_wa$orderid
       order_description <- get_query(paste0("SELECT itemdescription FROM orders WHERE id = ",orderid,";"))$itemdescription
       body_params <- list(
-        list('type' = 'text', 'text' = sent_wa$project),
         list('type' = 'text', 'text' = as.character(sent_wa$orderid)),
         list('type' = 'text', 'text' = order_description)
       )
@@ -588,7 +592,7 @@ handle_wa_button <- function(button_details, invoiceName=NULL) {
       md <- get_md_wa()
       send_template(md, body, template_name = 'md_project_completed', project = projectName)
       ac <- get_ac_wa()
-      send_template(ac, body, "ac_inv_notifications", project = projectName)
+      send_template(ac, body, "md_project_completed", project = projectName)
     }
     
     else if (button_details$text == "Approve Invoice") {
@@ -631,9 +635,10 @@ handle_wa_button <- function(button_details, invoiceName=NULL) {
             if (customerName == "") customerName <- " "
             body_params <- list(list('type' = 'text', 'text' = customerName))
             success <- send_template(customerMobile, body_params, "invoice", header, project=sent_WA$project, invoicename = sent_WA$invoicename)
+            body_params <- list(list('type' = 'text', 'text' = sent_WA$invoicename))
             if (success) send_template(admin, body_params = body_params, template_name = "invoice_success", project = sent_WA$project, invoicename = sent_WA$invoicename)
             else {
-              body_params <- list(list('type' = 'text', 'text' = customerName),
+              body_params <- list(list('type' = 'text', 'text' = sent_WA$invoicename),
                                   list('type' = 'text', 'text' = "An error occurred while trying to send the invoice to the customer."))
               send_template(admin, template_name = "invoice_failed", project = sent_WA$project, body_params = body_params, invoicename = sent_WA$invoicename)
             }
@@ -771,7 +776,6 @@ send_invoice_to_customer <- function(invoiceNo, invoiceID, wa_id, customerName, 
           'id' = docID,
           'filename' = filename
         )
-        
       )
     body_params <- list(
       list('type' = 'text', 'text' = customerName)
