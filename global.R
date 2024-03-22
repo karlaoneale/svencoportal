@@ -42,5 +42,5 @@ task_ids <- c("Fitting & Assembly" = "100989","Machining" = "93868","Other" = "9
 task_colors <- c("Fitting & Assembly" = "#118ab2","Machining" = "#06d6a0","Other" = "#ffd166","Welding & Fabrication" = "#ef476f", "Breakfast Break" = "#ff6b6b", "Cleaning" = "#7209b7", "Driving Duty" = "#ff9f1c", "HOD Meeting" = "#6a0572", "Workshop Maintenance" = "#118ab2")
 progress_icons <- c("Not Started" = "circle", "In Progress" = "circle-half-stroke", "Completed" = "circle")
 
-templates_that_req_actions <- c("task_complete", "task_time", "task_time_reminder", "request_payemt_without_quote", "invoice_approval", "quote_approval",
+templates_that_req_actions <- c("task_complete", "task_time", "task_time_reminder", "request_payment_without_quote", "invoice_approval", "quote_approval",
                                 "request_quote_pmt", "all_tasks_completed", "start_invoice", "new_order", "quote_no_pmt")
