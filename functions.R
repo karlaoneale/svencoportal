@@ -537,6 +537,10 @@ handle_wa_button <- function(button_details, invoiceName=NULL) {
       }
     }
     
+    else if (button_details$text == "Allow Notifications") {
+      
+    }
+    
     else if (button_details$text == "Approve Quote") {
       execute(paste0("UPDATE sent_wa SET responded = 'true' WHERE id = '", button_details$contextid, "';"))
       sent_wa <- get_query(paste0("SELECT * FROM sent_wa WHERE id = '",button_details$contextid,"';"))
