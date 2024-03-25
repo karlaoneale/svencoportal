@@ -33,6 +33,10 @@ get_ap_wa <- function() {return(get_query("SELECT wa_number FROM active_ts WHERE
 
 get_md_wa <- function() {return(get_query("SELECT wa_number FROM active_ts WHERE md = 'true';")$wa_number)}
 
+get_wa_id <- function(name) {return(get_query(paste0("SELECT wa_number FROM active_ts WHERE name = '",name,"';"))$wa_number)}
+
+get_name_from_wa_id <- function(wa_id) {return(get_query(paste0("SELECT name FROM active_ts WHERE wa_number = '",wa_id,"';"))$name)}
+
 get_from_api <- function(param, action = "Get", query_params = "") {
   url <- paste0(api_url, param, "/", action, "?", URLencode(query_params), "companyid=", companyid, "&apikey=", apikey)
   response <- GET(url, authenticate(username, password))
@@ -521,6 +525,18 @@ handle_wa_button <- function(button_details, invoiceName=NULL) {
       task_QC_passed(get_query(paste0("SELECT * FROM sent_wa WHERE id = '", button_details$contextid, "';")))
     }
     
+    else if (button_details$text == "Daily Summary") {
+      employee <- get_name_from_wa_id(button_details$fromid)
+      daily_tasks <- get_query(paste0("SELECT projectname, plannedstart FROM tasks WHERE employee = '",employee,"' AND status IN ('In Progress', 'Not Started');")) %>%
+        filter(as.Date(plannedstart) <= Sys.Date())
+      if (nrow(daily_tasks) == 0) {
+        send_template(button_details$from, template_name = "daily_summary_no_projects")
+      } else {
+        body <- list(list("type" = "text", "text" = paste("- ", unique(daily_tasks$projectname), collapse = "\\n- ")))
+        send_template(button_details$from, body, "daily_summary")
+      }
+    }
+    
     else if (button_details$text == "Approve Quote") {
       execute(paste0("UPDATE sent_wa SET responded = 'true' WHERE id = '", button_details$contextid, "';"))
       sent_wa <- get_query(paste0("SELECT * FROM sent_wa WHERE id = '",button_details$contextid,"';"))
@@ -802,4 +818,79 @@ forward_image <- function(df, from) {
   )
   send_template(pm, body, "project_image_fwd", heading = header, project = projectName)
   send_template(md, body, "project_image_fwd", heading = header ,project = projectName)
+}
+
+check_reminders <- function() {
+  weekday <- weekdays(Sys.time()) %in% c("Monday", "Tuesday", "Wednesday", "Thursday", "Friday")
+  current_hour <- as.numeric(format(Sys.time(), "%H"))
+  current_minute <- as.numeric(format(Sys.time(), "%M"))
+  is_between <- weekday && current_hour > 7 || (current_hour == 7 && current_minute >= 30) &&
+    current_hour < 15 || (current_hour == 15 && current_minute <= 30)
+  
+  if (is_between) {
+    print("Reminder check started")
+    not_responded <- get_query("SELECT * FROM sent_wa WHERE responded = 'false'")
+    if (nrow(not_responded) > 0) {
+      for (i in 1:nrow(not_responded)) {
+        if (not_responded$message[i] == 'task_time') {
+          taskid <- not_responded$task[i]
+          task_details <- get_query(paste0("SELECT * FROM tasks WHERE taskid = ", taskid, ";"))
+          if (as.POSIXct(task_details$plannedcompletion) < Sys.time()) {
+            sent_reminder <- get_query(paste0("SELECT * FROM sent_wa WHERE message = '",not_responded$id[i],"';")) %>% 
+              filter(timestamp > as.numeric(Sys.time()-ddays(1)))
+            if (nrow(sent_reminder) == 0) send_reminder(not_responded$recipientid[i], not_responded$id[i])
+          }
+        } else {
+          if (not_responded$timestamp[i] < as.numeric(Sys.time()-ddays(1))) {
+            sent_reminder <- get_query(paste0("SELECT * FROM sent_wa WHERE message = '",not_responded$id[i],"';")) %>% 
+              filter(timestamp > as.numeric(Sys.time()-ddays(1)))
+            if (nrow(sent_reminder) == 0) send_reminder(not_responded$recipientid[i], not_responded$id[i])
+          }
+        }
+      }
+    }
+    orders_not_received <- get_query(paste0("SELECT * FROM orders WHERE eta < '", Sys.Date(), "' AND status != 'Arrived';"))
+    if (nrow(orders_not_received)>0) {
+      for (i in 1: nrow (orders_not_received)) {
+        sent_reminder <- get_query(paste0("SELECT * FROM sent_wa WHERE message = 'purchase_not_received' AND orderid = '",orders_not_received$orderid[i],"';")) %>% 
+          filter(timestamp > as.numeric(Sys.time()-ddays(1)))
+        admin <- get_ap_wa()
+        if (nrow(sent_reminder) == 0) send_template(admin, list(list('type'='text', 'text'=as.character(orders_not_received$orderid[i]),"purchase_not_received", project = orders_not_received$project[i], orderid = orders_not_received$orderid[i])))
+      }
+      
+    }
+    print("Reminder check completed")
+  }
+}
+
+send_reminder <- function(wa_id, context_id) {
+  url <- paste0(wa_api_url,wa_from,"/messages")
+  body <- list(
+    "messaging_product" = "whatsapp",
+    "to" = wa_id,
+    "context" = list(
+      "message_id" = context_id
+    ),
+    "type" = "text",
+    "text" = list(
+      "body" = "*Reminder:* no response has been received with regards to this message."
+    )
+  )
+  response <- POST(url, encode = "json", body=body, add_headers("Authorization" = paste0("Bearer ",wa_token), "Content-Type" = "application/json"))
+  
+  # Check the response status
+  status_code <- response$status_code
+  if (status_code %in% c(200, 201)) {
+    api_data <- content(response, "text", encoding = "UTF-8")
+    parsed_data <- fromJSON(api_data)
+    message_id <- fromJSON(rawToChar(response$content))[["messages"]][["id"]]
+    execute(paste0("INSERT INTO sent_wa (id, timestamp, recipientid, task, project, orderid, docid, invoicename, message, responded) VALUES ('",message_id 
+                   , "',", as.numeric(Sys.time()),
+                   ",'", wa_id, "','", NULL, "','", NULL, "','", NULL, "','", NULL,"', '",NULL,"','",context_id,"', 'true');"))
+    print(paste0("Sent reminder to ",wa_id, " regarding: ", context_id))
+    return(TRUE)
+  } else {
+    print(paste("Error: API request failed with status code", status_code, " REMINDER: ", context_id))
+    return(FALSE)
+  }
 }

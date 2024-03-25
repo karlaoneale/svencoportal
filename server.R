@@ -17,19 +17,12 @@ server <- function(input, output, session) {
   observe({
     syncProj()
     sync_invoices_and_projects()
+    check_reminders()
   })
   
   observe({
     autoInvalidate()
     new_webhooks(get_new_webhooks())
-  })
-  
-  observe({
-    postgresTimer()
-    dbDisconnect(isolate(con()))
-    dbDisconnect(isolate(con())) 
-    con(dbConnect(RPostgres::Postgres(), user = "u2tnmv2ufe7rpk", password = "p899046d336be15351280fd542015420a8e18e22dfe07c1cccaaa8e0e9fb20631", host = "cdgn4ufq38ipd0.cluster-czz5s0kz4scl.eu-west-1.rds.amazonaws.com", port = 5432, dbname = "d6qh1puq26hrth"))
-    
   })
   
   sheet <- reactiveVal()
@@ -556,7 +549,7 @@ server <- function(input, output, session) {
   observeEvent(input$sidebartabs,{
     
     if (input$sidebartabs == "project_planner") {
-      tasks_sheet(get_query("SELECT * FROM tasks"))
+      tasks_sheet(unique(get_query("SELECT * FROM tasks")))
       proj_timevis_data <- reactiveVal(data.frame())
       filtered_projects <- projects()
       
@@ -716,7 +709,7 @@ server <- function(input, output, session) {
                                     "','", new_item$taskname, "', '", new_item$description,"', '", new_item$status, "', '", 
                                     new_item$employee,  "', '", new_item$plannedstart, "', '", 
                                     new_item$plannedcompletion, "', '", new_item$colour, "');"))
-          tasks_sheet(get_query("SELECT * FROM tasks"))
+          tasks_sheet(unique(get_query("SELECT * FROM tasks")))
           proj_timevis_data(updateProjTimevis(tasks_sheet() %>% filter(projectname == input$proj_plan))) 
         }
         shiny::removeModal()
@@ -889,7 +882,7 @@ server <- function(input, output, session) {
   # Timeline Overview page ----
   observeEvent(input$sidebartabs,{
     if (input$sidebartabs == "timeline_overview") {
-      tasks_sheet(get_query("SELECT * FROM tasks"))
+      tasks_sheet(unique(get_query("SELECT * FROM tasks")))
       updateSelectizeInput(session, "tl_ov_employees", choices = c("All", unique(tasks_sheet()$employee)))
       updateSelectizeInput(session, "tl_ov_project", choices = c("All", unique(tasks_sheet()$projectname)))
       updateSelectizeInput(session, "tl_ov_task", choices = c("All", unique(tasks_sheet()$taskname)))
@@ -898,6 +891,7 @@ server <- function(input, output, session) {
   
   output$overviewTimeVis <- renderTimevis({
     df <- tasks_sheet()
+    
     if (input$tl_ov_employees != "All") df <- df %>% filter(employee == input$tl_ov_employees)
     if (input$tl_ov_project != "All") df <- df %>% filter(projectname == input$tl_ov_project)
     if (input$tl_ov_task != "All") df <- df %>% filter(taskname == input$tl_ov_task)

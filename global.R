@@ -19,7 +19,9 @@ library(shinyWidgets)
 library(RSQLite)
 library(jpeg)  # or use 'png' if your image is in PNG format
 library(googledrive)
+library(shinyStore)
 library(RCurl)
+library(devtools)
 
 source("functions.R")
 
