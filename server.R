@@ -436,7 +436,7 @@ server <- function(input, output, session) {
             'file' = upload_file(row$datapath),
             'name' = row$name
           )
-          res <- VERB("POST", url = "https://graph.facebook.com/v18.0/206349329226876/media", body = body, add_headers("Authorization" = paste0("Bearer ",wa_token)), encode = 'multipart')
+          res <- VERB("POST", url = "https://graph.facebook.com/v18.0/256491817549838/media", body = body, add_headers("Authorization" = paste0("Bearer ",wa_token)), encode = 'multipart')
           docID <- fromJSON(content(res, 'text'))$id
           header <- list(
             'type' = 'document',

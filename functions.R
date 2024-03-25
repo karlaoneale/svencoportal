@@ -742,7 +742,7 @@ send_invoice_to_AC <- function(message_details) {
         'file' = upload_file(temp_file),
         'name' = filename
       )
-      res <- VERB("POST", url = "https://graph.facebook.com/v18.0/206349329226876/media", body = body, add_headers("Authorization" = paste0("Bearer ",wa_token)), encode = 'multipart')
+      res <- VERB("POST", url = "https://graph.facebook.com/v18.0/256491817549838/media", body = body, add_headers("Authorization" = paste0("Bearer ",wa_token)), encode = 'multipart')
       unlink(temp_file)
       docID <- fromJSON(content(res, 'text'))$id
       
@@ -784,7 +784,7 @@ send_invoice_to_customer <- function(invoiceNo, invoiceID, wa_id, customerName, 
       'file' = upload_file(temp_image),
       'name' = filename
     )
-    res <- VERB("POST", url = "https://graph.facebook.com/v18.0/206349329226876/media", body = body, add_headers("Authorization" = paste0("Bearer ",wa_token)), encode = 'multipart')
+    res <- VERB("POST", url = "https://graph.facebook.com/v18.0/256491817549838/media", body = body, add_headers("Authorization" = paste0("Bearer ",wa_token)), encode = 'multipart')
     unlink(temp_image)
     docID <- fromJSON(content(res, 'text'))$id
     
