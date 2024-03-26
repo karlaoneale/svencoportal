@@ -145,7 +145,7 @@ server <- function(input, output, session) {
           ac <- get_ac_wa()
           admin <- get_ai_wa()
           send_template(admin, body, "start_invoice", project = projects$projectname[i])
-          send_template(ac, body, "ac_inv_notifications", project = projects$projectname[i])
+          send_template(ac, body, "md_project_completed", project = projects$projectname[i])
           md <- get_md_wa()
           send_template(md, body, template_name = 'md_project_completed', project = projects$projectname[i])
         }
