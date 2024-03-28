@@ -689,7 +689,7 @@ server <- function(input, output, session) {
       })
       
       observeEvent(input$addTaskProj, {
-        latest_id <- max(tasks_sheet()$taskid)
+        latest_id <- max(get_query("SELECT taskid FROM tasks")$taskid)
         latest_task <- tasks_sheet()[tasks_sheet()$taskid == latest_id, -which(names(tasks_sheet()) == 'taskid')]
         new_item <- data.frame(
           projectname = input$proj_plan,

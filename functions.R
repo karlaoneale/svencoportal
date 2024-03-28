@@ -859,7 +859,7 @@ check_reminders <- function() {
         sent_reminder <- get_query(paste0("SELECT * FROM sent_wa WHERE message = 'purchase_not_received' AND orderid = '",orders_not_received$orderid[i],"';")) %>% 
           filter(timestamp > as.numeric(Sys.time()-ddays(1)))
         admin <- get_ap_wa()
-        if (nrow(sent_reminder) == 0) send_template(admin, list(list('type'='text', 'text'=as.character(orders_not_received$orderid[i]),"purchase_not_received", project = orders_not_received$project[i], orderid = orders_not_received$orderid[i])))
+        if (nrow(sent_reminder) == 0) send_template(admin, list(list('type'='text', 'text'=as.character(orders_not_received$orderid[i]))),"purchase_not_received", project = orders_not_received$project[i], orderid = orders_not_received$orderid[i])
       }
       
     }
