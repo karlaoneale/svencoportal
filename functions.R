@@ -856,10 +856,10 @@ check_reminders <- function() {
     orders_not_received <- get_query(paste0("SELECT * FROM orders WHERE eta < '", Sys.Date(), "' AND status != 'Arrived';"))
     if (nrow(orders_not_received)>0) {
       for (i in 1: nrow (orders_not_received)) {
-        sent_reminder <- get_query(paste0("SELECT * FROM sent_wa WHERE message = 'purchase_not_received' AND orderid = '",orders_not_received$orderid[i],"';")) %>% 
+        sent_reminder <- get_query(paste0("SELECT * FROM sent_wa WHERE message = 'purchase_not_received' AND orderid = '",orders_not_received$id[i],"';")) %>% 
           filter(timestamp > as.numeric(Sys.time()-ddays(1)))
         admin <- get_ap_wa()
-        if (nrow(sent_reminder) == 0) send_template(admin, list(list('type'='text', 'text'=as.character(orders_not_received$orderid[i]))),"purchase_not_received", project = orders_not_received$project[i], orderid = orders_not_received$orderid[i])
+        if (nrow(sent_reminder) == 0) send_template(admin, list(list('type'='text', 'text'=as.character(orders_not_received$id[i]))),"purchase_not_received", project = orders_not_received$project[i], orderid = orders_not_received$id[i])
       }
       
     }
