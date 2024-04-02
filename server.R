@@ -867,7 +867,7 @@ server <- function(input, output, session) {
       })
       
       observeEvent(input$dltTaskProj, {
-        execute(paste0("DELETE FROM tasks WHERE taskid = ", projectTimeVis_selected,";"))
+        execute(paste0("DELETE FROM tasks WHERE taskid = ", input$projectTimeVis_selected,";"))
         proj_timevis_data(get_query(paste0("SELECT * FROM tasks WHERE projectname = '",input$proj_plan, "';")))
         removeModal()
       })
