@@ -489,7 +489,7 @@ server <- function(input, output, session) {
         selectInput(
           inputId = "new_order_empl",
           label = "Submitted By:",
-          choices = c("Lisa", "Deneys", "Ursula", active_employees),
+          choices = unique(c("Lisa-Marie", "Sven", "Deneys", "Ursula", active_employees)),
           width = "270px"
         )
       ),
