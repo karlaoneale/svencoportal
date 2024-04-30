@@ -14,11 +14,11 @@ server <- function(input, output, session) {
   # Timer for connection of postgres every 90 mins
   syncProj <- reactiveTimer(1000*60*90)
   
-  observe({
-    syncProj()
-    sync_invoices_and_projects()
-    check_reminders()
-  })
+  # observe({
+  #   syncProj()
+  #   sync_invoices_and_projects()
+  #   check_reminders()
+  # })
   
   observe({
     autoInvalidate()
