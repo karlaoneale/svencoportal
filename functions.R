@@ -1,25 +1,25 @@
-con <- reactiveVal(dbConnect(RPostgres::Postgres(), user = "u2tnmv2ufe7rpk", password = "p899046d336be15351280fd542015420a8e18e22dfe07c1cccaaa8e0e9fb20631", host = "cdgn4ufq38ipd0.cluster-czz5s0kz4scl.eu-west-1.rds.amazonaws.com", port = 5432, dbname = "d6qh1puq26hrth"))
+con <- dbConnect(RPostgres::Postgres(), user = "u2tnmv2ufe7rpk", password = "p899046d336be15351280fd542015420a8e18e22dfe07c1cccaaa8e0e9fb20631", host = "cdgn4ufq38ipd0.cluster-czz5s0kz4scl.eu-west-1.rds.amazonaws.com", port = 5432, dbname = "d6qh1puq26hrth")
 
 get_query <- function(query) {
   a <- tryCatch({
-    a <- dbGetQuery(con(), query)
+    a <- dbGetQuery(con, query)
   }, 
   error = function(e) {
-    dbDisconnect(isolate(con())) 
-    con(dbConnect(RPostgres::Postgres(), user = "u2tnmv2ufe7rpk", password = "p899046d336be15351280fd542015420a8e18e22dfe07c1cccaaa8e0e9fb20631", host = "cdgn4ufq38ipd0.cluster-czz5s0kz4scl.eu-west-1.rds.amazonaws.com", port = 5432, dbname = "d6qh1puq26hrth"))
-    a <- dbGetQuery(con(), query)  
+    dbDisconnect(con)
+    con <- dbConnect(RPostgres::Postgres(), user = "u2tnmv2ufe7rpk", password = "p899046d336be15351280fd542015420a8e18e22dfe07c1cccaaa8e0e9fb20631", host = "cdgn4ufq38ipd0.cluster-czz5s0kz4scl.eu-west-1.rds.amazonaws.com", port = 5432, dbname = "d6qh1puq26hrth")
+    a <- dbGetQuery(con, query)  
   })
   return(a)
 }
 
 execute <- function(query) {
   tryCatch({
-    dbExecute(con(), query)
+    dbExecute(con, query)
   }, 
   error = function(e) {
-    dbDisconnect(isolate(con())) 
-    con(dbConnect(RPostgres::Postgres(), user = "u2tnmv2ufe7rpk", password = "p899046d336be15351280fd542015420a8e18e22dfe07c1cccaaa8e0e9fb20631", host = "cdgn4ufq38ipd0.cluster-czz5s0kz4scl.eu-west-1.rds.amazonaws.com", port = 5432, dbname = "d6qh1puq26hrth"))
-    dbExecute(con(), query)        
+    dbDisconnect(con)
+    con <- dbConnect(RPostgres::Postgres(), user = "u2tnmv2ufe7rpk", password = "p899046d336be15351280fd542015420a8e18e22dfe07c1cccaaa8e0e9fb20631", host = "cdgn4ufq38ipd0.cluster-czz5s0kz4scl.eu-west-1.rds.amazonaws.com", port = 5432, dbname = "d6qh1puq26hrth")
+    dbExecute(con, query)        
   })
 }
 
@@ -34,8 +34,6 @@ get_ap_wa <- function() {return(get_query("SELECT wa_number FROM active_ts WHERE
 get_md_wa <- function() {return(get_query("SELECT wa_number FROM active_ts WHERE md = 'true';")$wa_number)}
 
 get_wa_id <- function(name) {return(get_query(paste0("SELECT wa_number FROM active_ts WHERE name = '",name,"';"))$wa_number)}
-
-get_name_from_wa_id <- function(wa_id) {return(get_query(paste0("SELECT name FROM active_ts WHERE wa_number = '",wa_id,"';"))$name)}
 
 get_from_api <- function(param, action = "Get", query_params = "") {
   url <- paste0(api_url, param, "/", action, "?", URLencode(query_params), "companyid=", companyid, "&apikey=", apikey)
@@ -52,16 +50,6 @@ get_from_api <- function(param, action = "Get", query_params = "") {
   }
 }
 
-get_projects <- function(parsed_data) {
-  extracted_data <- data.frame(
-    ID = as.character(parsed_data$Results$ID),
-    Name = parsed_data$Results$Name,
-    Customer = parsed_data$Results$Customer$Name,
-    CustomerID = parsed_data$Results$CustomerID,
-    StartDate = parsed_data$Results$StartDate
-  )
-}
-
 get_tasks <- function(parsed_data) {
   ProjectTasks <- parsed_data$Results$ProjectTasks
   proj_vector <- c()
@@ -74,18 +62,6 @@ get_tasks <- function(parsed_data) {
     ProjectID = proj_vector
   )
   
-}
-
-get_customers <- function() {
-  parsed_data <- get_from_api("TimeTrackingCustomer", query_params = "$filter=Active eq true&")
-  data.frame(
-    CustomerID <- parsed_data$Results$ID,
-    Customer <- parsed_data$Results$Name
-  )
-}
-
-get_next_project <- function(projects) {
-  next_p <- max(as.numeric(substr(projects()$Name, 1, 4))) + 1
 }
 
 get_users <- function(parsed_data) {
@@ -222,143 +198,6 @@ updateProjTimevis <- function(df) {
     mutate_all(as.factor)
 }
 
-get_new_webhooks <- function() {
-  response <- GET(webhook_url)
-  
-  # Check the response status
-  status_code <- response$status_code
-  if (status_code == 200) {
-    api_data <- content(response, "text", encoding = "UTF-8")
-    parsed_data <- fromJSON(api_data)
-    if (length(parsed_data$messages) > 0) {
-      dbDisconnect(isolate(con())) 
-      con(dbConnect(RPostgres::Postgres(), user = "u2tnmv2ufe7rpk", password = "p899046d336be15351280fd542015420a8e18e22dfe07c1cccaaa8e0e9fb20631", host = "cdgn4ufq38ipd0.cluster-czz5s0kz4scl.eu-west-1.rds.amazonaws.com", port = 5432, dbname = "d6qh1puq26hrth"))
-      received_df <- data.frame()
-      sent_df <- data.frame()
-      for (webhook in parsed_data$messages$body$entry) {
-        if (!is.null(webhook$changes[[1]]$value$messages[[1]])) {
-          rec_webhook <- webhook$changes[[1]]$value$messages[[1]]
-          type <- rec_webhook$type
-          print(paste0("New ",type," webhook received from ", rec_webhook$from))
-          from <- get_query(paste0("SELECT name FROM active_ts WHERE wa_number = '",rec_webhook$from,"';"))$name
-          if (is.na(from)) {
-            send_template(rec_webhook$from, template_name = "unknown_number")
-            next
-          }
-          if (type == "button") {
-            print(paste0("New" ,type," Webhook Received: ",rec_webhook$from, ": ", rec_webhook$button$text, 
-                         ". Contextid = ",rec_webhook$context$id))
-            df <- data.frame(
-              "id" = rec_webhook$id,
-              "contextid" =rec_webhook$context$id,
-              "fromid" = rec_webhook$from,
-              "timestamp" = rec_webhook$timestamp,
-              "type" = type,
-              "text" = rec_webhook$button$text,
-              "attachmentid" = NA
-            )
-            handle_wa_button(df)
-          } else if (type == "text") {
-            print(paste0("New" ,type," Webhook Received: ",rec_webhook$from, ": ", rec_webhook$text$body, 
-                         ". Contextid = ",rec_webhook$context$id))
-            df <- data.frame(
-              "id" = rec_webhook$id,
-              "contextid" =ifelse (is.null(rec_webhook$context$id),NA, rec_webhook$context$id),
-              "fromid" = rec_webhook$from,
-              "timestamp" = rec_webhook$timestamp,
-              "type" = type,
-              "text" = gsub("\n", " ", rec_webhook$text$body),
-              "attachmentid" = NA
-            )
-            if (grepl("^N[0-9]{4}.*$", df$text)) { 
-              add_note(df)
-            } else if (grepl("^INV\\d{5}$", df$text)) {
-              send_invoice_to_AC(df)
-            } else if (grepl("^P[0-9]{4}.*$", df$text)) {
-              create_order(df)
-            } else send_template(rec_webhook$from, template_name = "unknown_request")
-            
-          } else if (type == "image") {
-            print(paste0("New" ,type," Webhook Received: ",rec_webhook$from, ": ", rec_webhook$image$caption, 
-                         ". Contextid = ",rec_webhook$context$id))
-            df <- data.frame(
-              "id" = rec_webhook$id,
-              "contextid" =ifelse (is.null(rec_webhook$context$id),NA, rec_webhook$context$id),
-              "fromid" = rec_webhook$from,
-              "timestamp" = rec_webhook$timestamp,
-              "type" = type,
-              "text" = ifelse (is.null(rec_webhook$image$caption),NA, gsub("\n", " ", rec_webhook$image$caption)),
-              "attachmentid" = rec_webhook$image$id
-            )
-            if (grepl("^[0-9]{4}$", df$text)) {
-              drive_link <- get_WA_image_and_upload(df, "ProjectImages", df$text)
-              execute(paste0("UPDATE projects SET images = '",drive_link, "' WHERE projectname LIKE '",df$text,"%';" ))
-              forward_image(df, from)
-            }
-            else if (grepl("^P[0-9]{4}.*$", df$text)) {
-              drive_link <- get_WA_image_and_upload(df, "ProjectOrders", substr(df$text, 2,5))
-              create_order(df, drive_link)
-            } else send_template(rec_webhook$from, template_name = "unknown_request")
-          } else if (type == "document") {
-            print(paste0("New" ,type," webhook received: ",rec_webhook$from, ": ", rec_webhook$document$caption, 
-                         ". Contextid = ",rec_webhook$context$id))
-            df <- data.frame(
-              "id" = rec_webhook$id,
-              "contextid" =ifelse (is.null(rec_webhook$context$id),NA, rec_webhook$context$id),
-              "fromid" = rec_webhook$from,
-              "timestamp" = rec_webhook$timestamp,
-              "type" = type,
-              "text" = ifelse(is.null(rec_webhook$document$caption),NA, gsub("\n", " ", rec_webhook$document$caption)),
-              "attachmentid" = rec_webhook$document$id
-            )
-            handle_wa_button(df)
-          }
-          else {
-            send_template(rec_webhook$from, template_name = "unknown_request")
-          }
-          received_df <- bind_rows(received_df, df)
-        }
-      }
-      if (nrow(received_df) > 0) {
-        unique_df <- received_df[!duplicated(received_df), ]
-        for (i in 1:nrow(unique_df)) {
-          row <- unique_df[i, ]
-          execute(paste0("INSERT INTO received_wa (id, fromid, timestamp, type, text) VALUES ('",
-                                    row$id, "', '", row$fromid, "', ", row$timestamp,", '", row$type,"', '", row$text,"');"))        
-          print(paste0("Webhook processed: ", row$text, " FROM ", row$fromid))
-        }
-      }
-    }
-  } 
-}
-
-get_WA_image_and_upload <- function(df, folder_name, project_name) {
-  url <- paste0(wa_api_url, df$attachmentid, "?","phone_number_id=", wa_from)
-  response <- GET(url, add_headers("Authorization" = paste0("Bearer ",wa_token), "Content-Type" = "application/json"))
-  
-  # Check the response status
-  status_code <- response$status_code
-  if (status_code == 200) {
-    api_data <- content(response, "text", encoding = "UTF-8")
-    parsed_data <- fromJSON(api_data)
-    
-    image_url <- parsed_data$url
-    
-    response2 <- GET(image_url, add_headers(Authorization = paste("Bearer", wa_token)),
-                     user_agent("Mozilla/5.0"))
-    filename <- paste0(
-      trimws(substr(df$text,7,nchar(df$text)), "left"),
-      "_",
-      paste0(sample(c(0:9, letters, LETTERS), 5, replace = TRUE), collapse = ""),
-      ".jpg"
-    )
-    # Check if the request was successful (status code 200)
-    if (response2$status_code == 200) {
-      uploadToGoogleDrive(response2$content, project_name, folder_name, filename)
-    }
-  } 
-}
-
 uploadToGoogleDrive <- function(image_binary, project_name, folder_name, filename = NULL) {
   drive_auth(path = google_drive_service_acc)
   temp_image <- tempfile(fileext = ".jpg")
@@ -428,30 +267,6 @@ create_order <- function(message_details, drive_link = NULL) {
   else send_template(message_details$from, template_name = "order_failed", project = projectName)
 }
 
-add_note <- function(df) {
-  projNumber <- substr(df$text, 2, 5)
-  note <- trimws(substr(df$text, 7, nchar(df$text)), "left") 
-  from <- (get_query(paste0("SELECT name FROM active_ts WHERE wa_number = '",df$from,"';"))$name)[1]
-  projectName <- get_query(paste0("SELECT projectname FROM projects WHERE projectname LIKE '", projNumber, "%';"))$projectname
-  existingNotes <- get_query(paste0("SELECT notes FROM projects WHERE projectname = '", projectName, "';"))$notes
-  if (!is.na(existingNotes)) {note = paste0(existingNotes, "   ", note)}
-  
-  execute(paste0("UPDATE projects SET notes = '",note,"' WHERE projectname = '",projectName,"';"))
-  
-  body_params <- list(
-    list('type' = 'text', 'text' = from),
-    list('type' = 'text', 'text' = projectName),
-    list('type' = 'text', 'text' = note)
-  )
-  pm <- get_pm_wa()
-  if (is.na(from) || pm != from) sent_to_pm <- send_template(pm, body_params, "new_note", project = projectName)
-  else sent_to_pm <- TRUE
-  
-  
-  if (sent_to_pm) send_template(df$from, template_name = "note_success", project = projectName)
-  else send_template(df$from, template_name = "note_failed", project = projectName)
-}
-
 task_QC_passed <- function(task_details) {
   execute(paste0("UPDATE tasks SET status = 'Completed' WHERE taskid = ", task_details$task, ";"))
   allstatuses <- get_query(paste0("SELECT status FROM tasks WHERE projectname = '", task_details$project, "';"))$status
@@ -477,424 +292,77 @@ tasks_ready_for_QC <- function(taskID) {
   send_template(QC, body, "task_complete", taskid = taskID, project = df$projectname)
 }
 
-handle_wa_button <- function(button_details, invoiceName=NULL) {
-  if (button_details$type == "document") {
-    accounts <- get_ac_wa()
-    if (accounts == button_details$from) {
-      sent_wa <- get_query(paste0("SELECT * FROM sent_wa WHERE id = '", button_details$contextid, "';"))
-      if (!is.null(sent_wa$docid)) {
-        docID <- sent_wa$docid
-        orderid <- sent_wa$orderid
-        order_description <- get_query(paste0("SELECT itemdescription FROM orders WHERE id = ",orderid,";"))$itemdescription
-        header1 <- list(
-          'type' = 'document',
-          'document' = list(
-            'id' = docID
-          )
-        )
-        header2 <- list(
-          'type' = 'document',
-          'document' = list(
-            'id' = button_details$attachmentid
-          )
-        )
-        body_params1 <- list(
-          list('type' = 'text', 'text' = as.character(sent_wa$orderid)),
-          list('type' = 'text', 'text' = order_description)
-        )
-        body_params2 <- list(
-          list('type' = 'text', 'text' = as.character(sent_wa$orderid))
-        )
-        admin <- get_ai_wa()
-        send_template(admin, body_params1, "quote_pmt_1", header1, project=sent_wa$project, orderid = orderid, docid = docID)
-        send_template(admin, body_params2, "quote_pmt_2", header2, project=sent_wa$project, orderid = orderid, docid = button_details$attachmentid)
-        execute(paste0("UPDATE orders SET status = 'Paid', lastupdate = '",format(Sys.Date(), format = "%d-%m-%Y"),"' WHERE id = ", orderid, ";"))
-      }
-    } else send_template(button_details$from, template_name = "unknown_request")
-  }
-  
-  else if (!is.na(button_details$text)) {
-    
-    if (button_details$text == "Task Completed") {
-      execute(paste0("UPDATE sent_wa SET responded = 'true' WHERE id = '", button_details$contextid, "';"))
-      tasks_ready_for_QC(get_query(paste0("SELECT task FROM sent_wa WHERE id = '", button_details$contextid, "';"))$task)
-    }
-    
-    else if (button_details$text == "QC Passed!") {
-      execute(paste0("UPDATE sent_wa SET responded = 'true' WHERE id = '", button_details$contextid, "';"))
-      task_QC_passed(get_query(paste0("SELECT * FROM sent_wa WHERE id = '", button_details$contextid, "';")))
-    }
-    
-    else if (button_details$text == "Daily Summary") {
-      employee <- get_name_from_wa_id(button_details$fromid)
-      daily_tasks <- get_query(paste0("SELECT projectname, plannedstart FROM tasks WHERE employee = '",employee,"' AND status IN ('In Progress', 'Not Started');")) %>%
-        filter(as.Date(plannedstart) <= Sys.Date())
-      if (nrow(daily_tasks) == 0) {
-        send_template(button_details$from, template_name = "daily_summary_no_projects")
-      } else {
-        body <- list(list("type" = "text", "text" = paste("- ", unique(daily_tasks$projectname), collapse = "\\n- ")))
-        send_template(button_details$from, body, "daily_summary")
-      }
-    }
-    
-    else if (button_details$text == "Allow Notifications") {
-      
-    }
-    
-    else if (button_details$text == "Approve Quote") {
-      sent_wa <- get_query(paste0("SELECT * FROM sent_wa WHERE id = '",button_details$contextid,"';"))
-      execute(paste0("UPDATE sent_wa SET responded = 'true' WHERE message = 'quote_approval' AND orderid = '", sent_wa$orderid, "';"))
-      docID <- sent_wa$docid
-      orderid <- sent_wa$orderid
-      order_description <- get_query(paste0("SELECT itemdescription FROM orders WHERE id = ",orderid,";"))$itemdescription
-      header <- list(
-        'type' = 'document',
-        'document' = list(
-          'id' = docID
-        )
-      )
-      body_params <- list(
-        list('type' = 'text', 'text' = sent_wa$project),
-        list('type' = 'text', 'text' = as.character(orderid)),
-        list('type' = 'text', 'text' = order_description)
-      )
-      accounts <- get_ac_wa()
-      send_template(accounts, body_params, "request_quote_pmt", header, project=sent_wa$project, orderid = orderid, docid = docID)
-      execute(paste0("UPDATE orders SET status = 'Quote Approved', lastupdate = '",format(Sys.Date(), format = "%d-%m-%Y"),"' WHERE id = ", orderid, ";"))
-    }
-    
-    else if (button_details$text == "Proceed Without Payment") {
-      execute(paste0("UPDATE sent_wa SET responded = 'true' WHERE id = '", button_details$contextid, "';"))
-      sent_wa <- get_query(paste0("SELECT * FROM sent_wa WHERE id = '",button_details$contextid,"';"))
-      docID <- sent_wa$docid
-      orderid <- sent_wa$orderid
-      order_description <- get_query(paste0("SELECT itemdescription FROM orders WHERE id = ",orderid,";"))$itemdescription
-      header <- list(
-        'type' = 'document',
-        'document' = list(
-          'id' = docID
-        )
-      )
-      body_params <- list(
-        list('type' = 'text', 'text' = as.character(sent_wa$orderid)),
-        list('type' = 'text', 'text' = order_description)
-      )
-      admin <- get_ai_wa()
-      send_template(admin, body_params, "quote_no_pmt", header, project=sent_wa$project, orderid = orderid, docid = docID)
-      execute(paste0("UPDATE orders SET status = 'Order Go Ahead', lastupdate = '",format(Sys.Date(), format = "%d-%m-%Y"),"' WHERE id = ", orderid, ";"))
-    }
-    
-    else if (button_details$text == "Approve Purchase") {
-      execute(paste0("UPDATE sent_wa SET responded = 'true' WHERE id = '", button_details$contextid, "';"))
-      sent_wa <- get_query(paste0("SELECT * FROM sent_wa WHERE id = '",button_details$contextid,"';"))
-      orderid <- sent_wa$orderid
-      order_description <- get_query(paste0("SELECT itemdescription FROM orders WHERE id = ",orderid,";"))$itemdescription
-      body_params <- list(
-        list('type' = 'text', 'text' = as.character(sent_wa$orderid)),
-        list('type' = 'text', 'text' = order_description)
-      )
-      admin <- get_ap_wa()
-      send_template(admin, body_params, "purchase_approval", project=sent_wa$project, orderid = orderid)
-      execute(paste0("UPDATE orders SET status = 'Purchase Go Ahead', lastupdate = '",format(Sys.Date(), format = "%d-%m-%Y"),"' WHERE id = ", orderid, ";"))
-    }
-    
-    else if (button_details$text == "Complete Project") {
-      execute(paste0("UPDATE sent_wa SET responded = 'true' WHERE id = '", button_details$contextid, "';"))
-      projectName <- get_query(paste0("SELECT project FROM sent_wa WHERE id = '", button_details$contextid, "';"))$project
-      execute(paste0("UPDATE projects SET status = 'To be Invoiced', lastupdate = '",format(Sys.Date(), format = "%d-%m-%Y"),
-                                "' WHERE projectname = '", projectName, "';"))
-      
-      body <- list(
-        list("type" = "text", "text" = projectName)
-      )
-      admin <- get_ai_wa()
-      send_template(admin, body, "start_invoice", project = projectName)
-      md <- get_md_wa()
-      send_template(md, body, template_name = 'md_project_completed', project = projectName)
-      ac <- get_ac_wa()
-      send_template(ac, body, "md_project_completed", project = projectName)
-    }
-    
-    else if (button_details$text == "Approve Invoice") {
-      execute(paste0("UPDATE sent_wa SET responded = 'true' WHERE id = '", button_details$contextid, "';"))
-      sent_WA <- get_query(paste0("SELECT * FROM sent_wa WHERE id = '",button_details$contextid,"';"))
-      header <- list(
-        'type' = 'document',
-        'document' = list(
-          'id' = sent_WA$docid,
-          'filename' = paste0(sent_WA$invoicename, ".pdf")
-        )
-      )
-      if (button_details$fromid == get_ac_wa()) {
-        body_params <- list(list('type' = 'text', 'text' = sent_WA$project))
-        pm <- get_pm_wa()
-        send_template(pm, body_params, "invoice_approval", heading = header, project = sent_WA$project, docid = sent_WA$docid, invoicename = sent_WA$invoicename)
-        execute(paste0("UPDATE projects SET status = 'Invoice Sent to Deneys', lastupdate = '",format(Sys.Date(), format = "%d-%m-%Y"),
-                                  "' WHERE projectname = '", sent_WA$project, "';"))
-      } else if (button_details$fromid == get_pm_wa()) {
-        body_params <- list(list('type' = 'text', 'text' = sent_WA$project))
-        main_director <- get_query(paste0("SELECT wa_number FROM active_ts WHERE md = 'true';"))$wa_number
-        send_template(main_director, body_params, "invoice_approval", heading = header, project = sent_WA$project, docid = sent_WA$docid, invoicename = sent_WA$invoicename)
-        execute(paste0("UPDATE projects SET status = 'Invoice Sent to Sven', lastupdate = '",format(Sys.Date(), format = "%d-%m-%Y"),
-                                  "' WHERE projectname = '", sent_WA$project, "';")) 
-      } else {
-        invoice_data <- (get_from_api("TaxInvoice", query_params = paste0("$filter=DocumentNumber eq '",sent_WA$invoicename,"'&includeDetail=False&includeCustomerDetails=True&") 
-        ))
-        admin <- get_ai_wa()
-        if (invoice_data$TotalResults > 0) {
-          invoiceID <- invoice_data$Results$ID
-          if (is.null(invoice_data$Results$Customer$Mobile) || invoice_data$Results$Customer$Mobile == "") {
-            body_params <- list(
-              list('type' = 'text', 'text' = sent_WA$invoicename),
-              list('type' = 'text', 'text' = "The customer's mobile number is missing.")
-            )
-            send_template(admin, template_name = "invoice_failed", project = sent_WA$project, body_params = body_params, invoicename = sent_WA$invoicename)
-          } else {
-            customerMobile <- get_WA_number(invoice_data$Results$Customer$Mobile)
-            customerName <- invoice_data$Results$Customer$ContactName
-            if (customerName == "") customerName <- " "
-            body_params <- list(list('type' = 'text', 'text' = customerName))
-            success <- send_template(customerMobile, body_params, "invoice", header, project=sent_WA$project, invoicename = sent_WA$invoicename)
-            body_params <- list(list('type' = 'text', 'text' = sent_WA$invoicename))
-            if (success) send_template(admin, body_params = body_params, template_name = "invoice_success", project = sent_WA$project, invoicename = sent_WA$invoicename)
-            else {
-              body_params <- list(list('type' = 'text', 'text' = sent_WA$invoicename),
-                                  list('type' = 'text', 'text' = "An error occurred while trying to send the invoice to the customer."))
-              send_template(admin, template_name = "invoice_failed", project = sent_WA$project, body_params = body_params, invoicename = sent_WA$invoicename)
-            }
-          }
-        } else {
-          body_params <- list(list('type' = 'text', 'text' = sent_WA$invoicename),
-                              list('type' = 'text', 'text' = "Unable to find the invoice on Sage."))
-          send_template(admin, body_params = body_params, template_name = "invoice_failed", project = sent_WA$project, body_params = body_params, invoicename = sent_WA$invoicename)
-        }
-        execute(paste0("UPDATE projects SET status = 'Invoiced', lastupdate = '",format(Sys.Date(), format = "%d-%m-%Y"),
-                                "' WHERE projectname = '", sent_WA$project, "';"))
-      }
-    } else send_template(button_details$from, template_name = "unknown_request")
-  } else send_template(button_details$from, template_name = "unknown_request")
-}
-
-get_WA_number <- function(number) {
-  wa_number <- paste0("27", substr(number, 2, nchar(number)))
-  return(wa_number)
-}
-
-sync_invoices_and_projects <- function() {
-  print("Start of invoices sync")
-  invoice_data <- (get_from_api("TaxInvoice", query_params = paste0("includeDetail=False&includeCustomerDetails=False&") ))
-  
-  if (invoice_data$TotalResults > 0) {
-    invoices <- data.frame(
-      "project" = substr(invoice_data$Results$Reference,1, 4),
-      "invoiceno" = invoice_data$Results$DocumentNumber,
-      "invoice_status" = invoice_data$Results$Status,
-      "customer" = invoice_data$Results$CustomerName
-    )
-    projects <- get_query("SELECT projectname, customer, invoiceno, invoice_status FROM projects;") %>%
-      mutate("project" = substr(projectname, 1,4))
-    merged_projects <- merge(projects, invoices, by = c("project", "customer"), all.x = TRUE) %>%
-      filter((is.na(invoiceno.x) & !is.na(invoiceno.y)) | (is.na(invoice_status.x) & !is.na(invoice_status.y)) | invoice_status.x != invoice_status.y)
-    if (nrow(merged_projects)>0) {
-      for (i in 1:nrow(merged_projects)) {
-        execute(paste0("UPDATE projects SET invoiceno = '", merged_projects$invoiceno.y[i], "', invoice_status = '", merged_projects$invoice_status.y[i], "' WHERE projectname = '",merged_projects$projectname[i],"';"))
-        pm <- get_pm_wa()
-        md <- get_md_wa()
-        ac <- get_ac_wa()
-        body <- list(
-          list('type'='text', 'text'=merged_projects$invoiceno.y[i]),
-          list('type'='text', 'text'=merged_projects$projectname[i]),
-          list('type'='text', 'text'=merged_projects$invoice_status.y[i])
-        )
-        send_template(pm, body, 'project_invoice_update', project = merged_projects$projectname[i], invoicename = merged_projects$invoiceno.y[i])
-        send_template(md, body, 'project_invoice_update', project = merged_projects$projectname[i], invoicename = merged_projects$invoiceno.y[i])
-        send_template(ac, body, 'project_invoice_update', project = merged_projects$projectname[i], invoicename = merged_projects$invoiceno.y[i])
-      }
-    }
-  }
-  if (!is.null(merged_projects)) n <- nrow(merged_projects)
-  else n <- 0
-  print(paste0("End of invoices sync: ", n))
-}
-
-send_invoice_to_AC <- function(message_details) {
-  execute(paste0("UPDATE sent_wa SET responded = 'true' WHERE id = '", message_details$contextid, "';"))
-  projectName <- get_query(paste0("SELECT project FROM sent_wa WHERE id = '", message_details$contextid, "';"))$project
-  invoice_data <- (get_from_api(
-    "TaxInvoice", 
-    query_params = paste0("$filter=DocumentNumber eq '",message_details$text,"'&includeDetail=False&includeCustomerDetails=False&") 
-  ))
-  if (invoice_data$TotalResults > 0) {
-    invoiceID <- invoice_data$Results$ID
-    
-    # Get document
-    url <- paste0(api_url, "TaxInvoice/Export/", invoiceID, "?companyid=", companyid, "&apikey=", apikey)
-    response <- GET(url, authenticate(username, password))
-    status_code <- response$status_code
-    if (status_code == 200) {
-      temp_file <- tempfile(fileext = ".pdf")
-      writeBin(response$content, temp_file)
-      filename <- paste0(message_details$text,".pdf")
-      
-      # Upload doc to Whatsapp
-      body = list(
-        'messaging_product' = 'whatsapp',
-        'file' = upload_file(temp_file),
-        'name' = filename
-      )
-      res <- VERB("POST", url = "https://graph.facebook.com/v18.0/256491817549838/media", body = body, add_headers("Authorization" = paste0("Bearer ",wa_token)), encode = 'multipart')
-      unlink(temp_file)
-      docID <- fromJSON(content(res, 'text'))$id
-      
-      # Send invoice to PM
-      header <- list(
-        'type' = 'document',
-        'document' = list(
-          'id' = docID,
-          'filename' = filename
-        )
-      )
-      
-      body_params <- list(list('type' = 'text', 'text' = projectName))
-      ac <- get_ac_wa()
-      send_template(ac, body_params, "invoice_approval", heading = header, project = projectName, docid = docID, invoicename = message_details$text)
-    }} else {
-      body_params <- list(list('type' = 'text', 'text' = message_details$text),
-                          list('type' = 'text', 'text' = "Unable to find the invoice on Sage."))
-      admin <- get_ai_wa()
-      send_template(admin, template_name = "invoice_failed", project = projectName, body_params = body_params, invoicename = message_details$text)
-    }
-  execute(paste0("UPDATE projects SET status = 'Invoice Sent to PM', invoiceno = '",message_details$text,"', lastupdate = '",format(Sys.Date(), format = "%d-%m-%Y"),
-                            "' WHERE projectname = '", projectName, "';"))
-}
-
-send_invoice_to_customer <- function(invoiceNo, invoiceID, wa_id, customerName, projectName) {
-  # Get document
-  url <- paste0(api_url, "TaxInvoice/Export/", invoiceID, "?companyid=", companyid, "&apikey=", apikey)
-  response <- GET(url, authenticate(username, password))
-  status_code <- response$status_code
-  if (status_code == 200) {
-    temp_image <- tempfile(fileext = ".pdf")
-    writeBin(response$content, temp_image)
-    filename <- paste0(invoiceNo,".pdf")
-    
-    # Upload doc to Whatsapp
-    body = list(
-      'messaging_product' = 'whatsapp',
-      'file' = upload_file(temp_image),
-      'name' = filename
-    )
-    res <- VERB("POST", url = "https://graph.facebook.com/v18.0/256491817549838/media", body = body, add_headers("Authorization" = paste0("Bearer ",wa_token)), encode = 'multipart')
-    unlink(temp_image)
-    docID <- fromJSON(content(res, 'text'))$id
-    
-    # Send invoice to Customer
-    header <- 
-      list(
-        'type' = 'document',
-        'document' = list(
-          'id' = docID,
-          'filename' = filename
-        )
-      )
-    body_params <- list(
-      list('type' = 'text', 'text' = customerName)
-    )
-    
-    message <- send_template(wa_id, body_params, "invoice", header, project=projectName)
-    return(message)
-  } else return(FALSE)
-}
-
-get_active_projects <- function() {      
-  active_proj <- get_query(paste0("SELECT projectid FROM projects WHERE status IN ('Not Started', 'In Progress');"))$projectid
-  projects <- get_projects(get_from_api("TimeTrackingProject","GetActiveProjects")) %>% filter(ID %in% active_proj)
-}
-
-forward_image <- function(df, from) {
-  pm <- get_pm_wa()
-  md <- get_md_wa()
-  header <- list('type' = 'image', 'image' = list('id' = df$attachmentid))
-  projectName <- df$text
-  body <- list(
-    list('type' = 'text', 'text' = from),
-    list('type' = 'text', 'text' = projectName)
-  )
-  send_template(pm, body, "project_image_fwd", heading = header, project = projectName)
-  send_template(md, body, "project_image_fwd", heading = header ,project = projectName)
-}
-
-check_reminders <- function() {
-  weekday <- weekdays(Sys.time()) %in% c("Monday", "Tuesday", "Wednesday", "Thursday", "Friday")
-  current_hour <- as.numeric(format(Sys.time(), "%H"))
-  current_minute <- as.numeric(format(Sys.time(), "%M"))
-  is_between <- weekday && current_hour > 7 || (current_hour == 7 && current_minute >= 30) &&
-    current_hour < 15 || (current_hour == 15 && current_minute <= 30)
-  
-  if (is_between) {
-    print("Reminder check started")
-    not_responded <- get_query("SELECT * FROM sent_wa WHERE responded = 'false'")
-    if (nrow(not_responded) > 0) {
-      for (i in 1:nrow(not_responded)) {
-        if (not_responded$message[i] == 'task_time') {
-          taskid <- not_responded$task[i]
-          task_details <- get_query(paste0("SELECT * FROM tasks WHERE taskid = ", taskid, ";"))
-          if (as.POSIXct(task_details$plannedcompletion) < Sys.time()) {
-            sent_reminder <- get_query(paste0("SELECT * FROM sent_wa WHERE message = '",not_responded$id[i],"';")) %>% 
-              filter(timestamp > as.numeric(Sys.time()-ddays(1)))
-            if (nrow(sent_reminder) == 0) send_reminder(not_responded$recipientid[i], not_responded$id[i])
-          }
-        } else {
-          if (not_responded$timestamp[i] < as.numeric(Sys.time()-ddays(1))) {
-            sent_reminder <- get_query(paste0("SELECT * FROM sent_wa WHERE message = '",not_responded$id[i],"';")) %>% 
-              filter(timestamp > as.numeric(Sys.time()-ddays(1)))
-            if (nrow(sent_reminder) == 0) send_reminder(not_responded$recipientid[i], not_responded$id[i])
-          }
-        }
-      }
-    }
-    orders_not_received <- get_query(paste0("SELECT * FROM orders WHERE eta < '", Sys.Date(), "' AND status != 'Arrived';"))
-    if (nrow(orders_not_received)>0) {
-      for (i in 1: nrow (orders_not_received)) {
-        sent_reminder <- get_query(paste0("SELECT * FROM sent_wa WHERE message = 'purchase_not_received' AND orderid = '",orders_not_received$id[i],"';")) %>% 
-          filter(timestamp > as.numeric(Sys.time()-ddays(1)))
-        admin <- get_ap_wa()
-        if (nrow(sent_reminder) == 0) send_template(admin, list(list('type'='text', 'text'=as.character(orders_not_received$id[i]))),"purchase_not_received", project = orders_not_received$project[i], orderid = orders_not_received$id[i])
-      }
-      
-    }
-    print("Reminder check completed")
-  }
-}
-
-send_reminder <- function(wa_id, context_id) {
-  url <- paste0(wa_api_url,wa_from,"/messages")
-  body <- list(
-    "messaging_product" = "whatsapp",
-    "to" = wa_id,
-    "context" = list(
-      "message_id" = context_id
-    ),
-    "type" = "text",
-    "text" = list(
-      "body" = "*Reminder:* no response has been received with regards to this message."
-    )
-  )
-  response <- POST(url, encode = "json", body=body, add_headers("Authorization" = paste0("Bearer ",wa_token), "Content-Type" = "application/json"))
-  
-  # Check the response status
-  status_code <- response$status_code
-  if (status_code %in% c(200, 201)) {
-    api_data <- content(response, "text", encoding = "UTF-8")
-    parsed_data <- fromJSON(api_data)
-    message_id <- fromJSON(rawToChar(response$content))[["messages"]][["id"]]
-    execute(paste0("INSERT INTO sent_wa (id, timestamp, recipientid, task, project, orderid, docid, invoicename, message, responded) VALUES ('",message_id 
-                   , "',", as.numeric(Sys.time()),
-                   ",'", wa_id, "','", NULL, "','", NULL, "','", NULL, "','", NULL,"', '",NULL,"','",context_id,"', 'true');"))
-    print(paste0("Sent reminder to ",wa_id, " regarding: ", context_id))
-    return(TRUE)
-  } else {
-    print(paste("Error: API request failed with status code", status_code, " REMINDER: ", context_id))
-    return(FALSE)
-  }
-}
+# check_reminders <- function() {
+#   weekday <- weekdays(Sys.time()) %in% c("Monday", "Tuesday", "Wednesday", "Thursday", "Friday")
+#   current_hour <- as.numeric(format(Sys.time(), "%H"))
+#   current_minute <- as.numeric(format(Sys.time(), "%M"))
+#   is_between <- weekday && current_hour > 7 || (current_hour == 7 && current_minute >= 30) &&
+#     current_hour < 15 || (current_hour == 15 && current_minute <= 30)
+#   
+#   if (is_between) {
+#     print("Reminder check started")
+#     not_responded <- get_query("SELECT * FROM sent_wa WHERE responded = 'false'")
+#     if (nrow(not_responded) > 0) {
+#       for (i in 1:nrow(not_responded)) {
+#         if (not_responded$message[i] == 'task_time') {
+#           taskid <- not_responded$task[i]
+#           task_details <- get_query(paste0("SELECT * FROM tasks WHERE taskid = ", taskid, ";"))
+#           if (as.POSIXct(task_details$plannedcompletion) < Sys.time()) {
+#             sent_reminder <- get_query(paste0("SELECT * FROM sent_wa WHERE message = '",not_responded$id[i],"';")) %>% 
+#               filter(timestamp > as.numeric(Sys.time()-ddays(1)))
+#             if (nrow(sent_reminder) == 0) send_reminder(not_responded$recipientid[i], not_responded$id[i])
+#           }
+#         } else {
+#           if (not_responded$timestamp[i] < as.numeric(Sys.time()-ddays(1))) {
+#             sent_reminder <- get_query(paste0("SELECT * FROM sent_wa WHERE message = '",not_responded$id[i],"';")) %>% 
+#               filter(timestamp > as.numeric(Sys.time()-ddays(1)))
+#             if (nrow(sent_reminder) == 0) send_reminder(not_responded$recipientid[i], not_responded$id[i])
+#           }
+#         }
+#       }
+#     }
+#     orders_not_received <- get_query(paste0("SELECT * FROM orders WHERE eta < '", Sys.Date(), "' AND status != 'Arrived';"))
+#     if (nrow(orders_not_received)>0) {
+#       for (i in 1: nrow (orders_not_received)) {
+#         sent_reminder <- get_query(paste0("SELECT * FROM sent_wa WHERE message = 'purchase_not_received' AND orderid = '",orders_not_received$id[i],"';")) %>% 
+#           filter(timestamp > as.numeric(Sys.time()-ddays(1)))
+#         admin <- get_ap_wa()
+#         if (nrow(sent_reminder) == 0) send_template(admin, list(list('type'='text', 'text'=as.character(orders_not_received$id[i]))),"purchase_not_received", project = orders_not_received$project[i], orderid = orders_not_received$id[i])
+#       }
+#       
+#     }
+#     print("Reminder check completed")
+#   }
+# }
+# 
+# send_reminder <- function(wa_id, context_id) {
+#   url <- paste0(wa_api_url,wa_from,"/messages")
+#   body <- list(
+#     "messaging_product" = "whatsapp",
+#     "to" = wa_id,
+#     "context" = list(
+#       "message_id" = context_id
+#     ),
+#     "type" = "text",
+#     "text" = list(
+#       "body" = "*Reminder:* no response has been received with regards to this message."
+#     )
+#   )
+#   response <- POST(url, encode = "json", body=body, add_headers("Authorization" = paste0("Bearer ",wa_token), "Content-Type" = "application/json"))
+#   
+#   # Check the response status
+#   status_code <- response$status_code
+#   if (status_code %in% c(200, 201)) {
+#     api_data <- content(response, "text", encoding = "UTF-8")
+#     parsed_data <- fromJSON(api_data)
+#     message_id <- fromJSON(rawToChar(response$content))[["messages"]][["id"]]
+#     execute(paste0("INSERT INTO sent_wa (id, timestamp, recipientid, task, project, orderid, docid, invoicename, message, responded) VALUES ('",message_id 
+#                    , "',", as.numeric(Sys.time()),
+#                    ",'", wa_id, "','", NULL, "','", NULL, "','", NULL, "','", NULL,"', '",NULL,"','",context_id,"', 'true');"))
+#     print(paste0("Sent reminder to ",wa_id, " regarding: ", context_id))
+#     return(TRUE)
+#   } else {
+#     print(paste("Error: API request failed with status code", status_code, " REMINDER: ", context_id))
+#     return(FALSE)
+#   }
+# }

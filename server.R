@@ -6,7 +6,7 @@ server <- function(input, output, session) {
   postgresTimer <- reactiveTimer(1000*60*4)
   new_webhooks <- reactiveVal()
   con <- reactiveVal(dbConnect(RPostgres::Postgres(), user = "u2tnmv2ufe7rpk", password = "p899046d336be15351280fd542015420a8e18e22dfe07c1cccaaa8e0e9fb20631", host = "cdgn4ufq38ipd0.cluster-czz5s0kz4scl.eu-west-1.rds.amazonaws.com", port = 5432, dbname = "d6qh1puq26hrth"))
-  projects <- reactiveVal(get_projects(get_from_api("TimeTrackingProject","GetActiveProjects")))
+  projects <- reactiveVal(get_query("SELECT * FROM projects;"))
   tasks_sheet <- reactiveVal()
   orders_data <- reactiveVal()
   
@@ -32,28 +32,6 @@ server <- function(input, output, session) {
   # Project Admin page ----
   output$project_admin_table <- renderDT({
     proj_sheet <- get_query("SELECT * FROM projects")
-    projects(get_projects(get_from_api("TimeTrackingProject","GetActiveProjects")))
-    missing_rows <- projects()[!(projects()$ID %in% proj_sheet$projectid), ]
-    inactive <- proj_sheet[!(proj_sheet$projectid %in% projects()$ID),]$projectid
-    inactive_values <- paste0(inactive, collapse = ", ")
-    if (length(inactive) > 0) {
-      execute(paste("UPDATE projects SET active = FALSE WHERE projectid IN (", inactive_values, ")"))
-    }
-    if (nrow(missing_rows)>0) {
-      add <- data.frame(
-        "projectid" = as.numeric(missing_rows$ID),
-        "projectname" = missing_rows$Name,
-        "customer" = missing_rows$Customer,
-        "status" = "Not Started",
-        "added" = substr(missing_rows$StartDate, 0,10), 
-        "lastupdate" = substr(missing_rows$StartDate, 0,10),
-        "invoiceno" = NA,
-        "images" = NA,
-        "notes" = NA,
-        "active" = TRUE
-      )
-      dbWriteTable(con(), "projects", add, append = TRUE, overwrite = FALSE)
-    }
     if (input$show_only_incomplete_projects) proj_admin_table(proj_sheet %>% filter(status %in% c("Not Started", "In Progress", "Ready for QC", "To be Invoiced")) %>% arrange(desc(projectname)))
     else proj_admin_table(proj_sheet %>% arrange(desc(projectname)))
     datatable(proj_admin_table() %>%
@@ -553,8 +531,8 @@ server <- function(input, output, session) {
       proj_timevis_data <- reactiveVal(data.frame())
       filtered_projects <- projects()
       
-      choices_display <- paste0(filtered_projects$Name, " (", filtered_projects$Customer, ")")
-      named_vector <- setNames(filtered_projects$Name, choices_display) %>%
+      choices_display <- paste0(filtered_projects$projectname, " (", filtered_projects$customer, ")")
+      named_vector <- setNames(filtered_projects$projectname, choices_display) %>%
         sort(decreasing = TRUE)
       updateSelectizeInput(session, "proj_plan", label = NULL, choices = c("Select Project", named_vector))
       
@@ -575,7 +553,7 @@ server <- function(input, output, session) {
       
       observeEvent(input$addTask, {
         enabled_users <- get_query("SELECT name FROM active_ts")$name
-        proj_id <- (projects() %>% filter(Name == input$proj_plan))$ID
+        proj_id <- (projects() %>% filter(projectname == input$proj_plan))$projectid
         tasks <- filter(tasks(), grepl(paste0("\\b", proj_id, "\\b"), ProjectID))$Name
         removeModal()
         shiny::modalDialog(
@@ -673,9 +651,9 @@ server <- function(input, output, session) {
       })
       
       observeEvent(input$proj_plan, {
-        proj_id <- (projects() %>% filter(Name == input$proj_plan))$ID
+        proj_id <- (projects() %>% filter(projectname == input$proj_plan))$projectid
         current_proj <- input$proj_plan
-        if (!is.null(current_proj) && current_proj != "") {
+        if (!is.null(current_proj) && current_proj != "" && length(proj_id) != 0) {
           shinyjs::show("projectTasks_div")
           shinyjs::show("addTask_div")
           df <- tasks_sheet() %>% filter(projectname == input$proj_plan)
@@ -718,7 +696,7 @@ server <- function(input, output, session) {
       observeEvent(input$projectTimeVis_selected, {
         selected_task <- get_query(paste0("SELECT * FROM tasks WHERE taskid = ", input$projectTimeVis_selected, ";"))
         enabled_users <- get_query(paste0("SELECT name FROM active_ts;"))$name
-        proj_id <- (isolate(projects()) %>% filter(Name == input$proj_plan))$ID
+        proj_id <- (isolate(projects()) %>% filter(projectname == input$proj_plan))$projectid
         tasks <- filter(isolate(tasks()), grepl(paste0("\\b", proj_id, "\\b"), ProjectID))$Name
         shiny::modalDialog(
           title = "Edit Task",
@@ -917,7 +895,7 @@ server <- function(input, output, session) {
   observeEvent(input$overviewTimeVis_selected, {
     selected_task <- get_query(paste0("SELECT * FROM tasks WHERE taskid = ", input$overviewTimeVis_selected, ";"))
     enabled_users <- get_query(paste0("SELECT name FROM active_ts;"))$name
-    proj_id <- (isolate(projects()) %>% filter(Name == selected_task$projectname))$ID
+    proj_id <- (isolate(projects()) %>% filter(customername == selected_task$projectname))$projectid
     tasks <- filter(isolate(tasks()), grepl(paste0("\\b", proj_id, "\\b"), ProjectID))$Name
     shiny::modalDialog(
       title = "Edit Task",
@@ -1174,6 +1152,7 @@ server <- function(input, output, session) {
       })
       
       observeEvent(input$active_empl_table_cell_edit, {
+        browser()
         userid <- enabled_users()[input$active_empl_table_cell_edit$row,]$userid
         execute(paste0("UPDATE active_ts SET wa_number = '", input$active_empl_table_cell_edit$value, 
                                   "' WHERE userid = ", userid)) 
