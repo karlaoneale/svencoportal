@@ -20,11 +20,6 @@ server <- function(input, output, session) {
   #   check_reminders()
   # })
   
-  observe({
-    autoInvalidate()
-    new_webhooks(get_new_webhooks())
-  })
-  
   sheet <- reactiveVal()
   tasks <- reactiveVal()
   proj_admin_table <- reactiveVal()
