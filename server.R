@@ -1175,6 +1175,7 @@ server <- function(input, output, session) {
       
       observeEvent(input$active_empl_table_cell_edit, {
         userid <- enabled_users()[input$active_empl_table_cell_edit$row,]$userid
+        print(paste("Number changed for", userid, "to", input$active_empl_table_cell_edit$value, "."))
         execute(paste0("UPDATE active_ts SET wa_number = '", input$active_empl_table_cell_edit$value, 
                                   "' WHERE userid = ", userid)) 
       })
