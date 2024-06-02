@@ -1,25 +1,25 @@
-con <- reactiveVal(dbConnect(RPostgres::Postgres(), user = "u2tnmv2ufe7rpk", password = "p899046d336be15351280fd542015420a8e18e22dfe07c1cccaaa8e0e9fb20631", host = "cdgn4ufq38ipd0.cluster-czz5s0kz4scl.eu-west-1.rds.amazonaws.com", port = 5432, dbname = "d6qh1puq26hrth"))
+con <- dbConnect(RPostgres::Postgres(), user = "u2tnmv2ufe7rpk", password = "p899046d336be15351280fd542015420a8e18e22dfe07c1cccaaa8e0e9fb20631", host = "cdgn4ufq38ipd0.cluster-czz5s0kz4scl.eu-west-1.rds.amazonaws.com", port = 5432, dbname = "d6qh1puq26hrth")
 
 get_query <- function(query) {
   a <- tryCatch({
-    a <- dbGetQuery(con(), query)
+    a <- dbGetQuery(con, query)
   }, 
   error = function(e) {
-    dbDisconnect(isolate(con())) 
-    con(dbConnect(RPostgres::Postgres(), user = "u2tnmv2ufe7rpk", password = "p899046d336be15351280fd542015420a8e18e22dfe07c1cccaaa8e0e9fb20631", host = "cdgn4ufq38ipd0.cluster-czz5s0kz4scl.eu-west-1.rds.amazonaws.com", port = 5432, dbname = "d6qh1puq26hrth"))
-    a <- dbGetQuery(con(), query)  
+    dbDisconnect(con)
+    con <- dbConnect(RPostgres::Postgres(), user = "u2tnmv2ufe7rpk", password = "p899046d336be15351280fd542015420a8e18e22dfe07c1cccaaa8e0e9fb20631", host = "cdgn4ufq38ipd0.cluster-czz5s0kz4scl.eu-west-1.rds.amazonaws.com", port = 5432, dbname = "d6qh1puq26hrth")
+    a <- dbGetQuery(con, query)  
   })
   return(a)
 }
 
 execute <- function(query) {
   tryCatch({
-    dbExecute(con(), query)
+    dbExecute(con, query)
   }, 
   error = function(e) {
-    dbDisconnect(isolate(con())) 
-    con(dbConnect(RPostgres::Postgres(), user = "u2tnmv2ufe7rpk", password = "p899046d336be15351280fd542015420a8e18e22dfe07c1cccaaa8e0e9fb20631", host = "cdgn4ufq38ipd0.cluster-czz5s0kz4scl.eu-west-1.rds.amazonaws.com", port = 5432, dbname = "d6qh1puq26hrth"))
-    dbExecute(con(), query)        
+    dbDisconnect(con)
+    con <- dbConnect(RPostgres::Postgres(), user = "u2tnmv2ufe7rpk", password = "p899046d336be15351280fd542015420a8e18e22dfe07c1cccaaa8e0e9fb20631", host = "cdgn4ufq38ipd0.cluster-czz5s0kz4scl.eu-west-1.rds.amazonaws.com", port = 5432, dbname = "d6qh1puq26hrth")
+    dbExecute(con, query)        
   })
 }
 
@@ -89,7 +89,7 @@ get_next_project <- function(projects) {
 }
 
 get_users <- function(parsed_data) {
-  extracted_data <- data.frame("FirstName"=parsed_data$Results$FirstName, "ID"=parsed_data$Results$ID)
+  extracted_data <- data.frame("FirstName"=parsed_data$Results$FirstName, "ID"=parsed_data$Results$ID, "Cost"=parsed_data$Results$CostPerHour)
 }
 
 post_to_api <- function(param, data) {
@@ -100,6 +100,22 @@ post_to_api <- function(param, data) {
   # Check the response status
   status_code <- response$status_code
   if (status_code == 201) {
+    api_data <- content(response, "text", encoding = "UTF-8")
+    parsed_data <- fromJSON(api_data)
+  } else {
+    resetPage()
+    stop(paste("Error: API request failed with status code", status_code))
+  }
+}
+
+get_timesheets <- function(projectid) {
+  url <- paste0(api_url,"TimeTrackingTimesheet/GetTimesheetSummaryDetail?companyid=",companyid,"&apikey=",apikey)
+  body <- toJSON(list("Type"=4, "Date" = "2024-06-02", "RangeType"=0, "ProjectId"=projectid), auto_unbox = TRUE)
+  response <- POST(url, encode = "json", body=body, authenticate(username, password),add_headers("Content-Type" = "application/json"))
+  
+  # Check the response status
+  status_code <- response$status_code
+  if (status_code < 300) {
     api_data <- content(response, "text", encoding = "UTF-8")
     parsed_data <- fromJSON(api_data)
   } else {
@@ -231,8 +247,8 @@ get_new_webhooks <- function() {
     api_data <- content(response, "text", encoding = "UTF-8")
     parsed_data <- fromJSON(api_data)
     if (length(parsed_data$messages) > 0) {
-      dbDisconnect(isolate(con())) 
-      con(dbConnect(RPostgres::Postgres(), user = "u2tnmv2ufe7rpk", password = "p899046d336be15351280fd542015420a8e18e22dfe07c1cccaaa8e0e9fb20631", host = "cdgn4ufq38ipd0.cluster-czz5s0kz4scl.eu-west-1.rds.amazonaws.com", port = 5432, dbname = "d6qh1puq26hrth"))
+      dbDisconnect(con) 
+      con <<- dbConnect(RPostgres::Postgres(), user = "u2tnmv2ufe7rpk", password = "p899046d336be15351280fd542015420a8e18e22dfe07c1cccaaa8e0e9fb20631", host = "cdgn4ufq38ipd0.cluster-czz5s0kz4scl.eu-west-1.rds.amazonaws.com", port = 5432, dbname = "d6qh1puq26hrth")
       received_df <- data.frame()
       sent_df <- data.frame()
       for (webhook in parsed_data$messages$body$entry) {

@@ -12,7 +12,8 @@ dashboardPage(
                      menuItem("Timeline Overview",tabName = "timeline_overview", icon = icon("timeline")),
                      menuItem("Project Planner", tabName = "project_planner", icon = icon("calendar-days")),
                      menuItem("Purchases", tabName = "purchases", icon = icon("cart-shopping")),
-                     menuItem("User Management", tabName = "user_management", icon = icon("users"))
+                     menuItem("User Management", tabName = "user_management", icon = icon("users")),
+                     menuItem("Project Report", tabName = "project_report", icon = icon("chart-line"))
                    )
   ),
   
@@ -103,6 +104,44 @@ dashboardPage(
           )
         ))
       ),
+      tabItem(
+        tabName = "project_report",
+          div(fluidRow( box(width=12,style="padding:0px;",
+            column(width=4,selectInput("report_inv", "", c("Loading..."))),
+            column(width=4,selectInput("report_ref", "", c("Loading..."))),
+            column(width = 4,
+                   br(),
+                   column(width=6,actionButton(inputId = "generate_report", label = "Generate Report", class = "back")),
+                   column(width=6,actionButton(inputId = "refreshProjectReport", label = "Refresh Project Data", icon = icon("rotate-right"), class = "add_proj"))
+            )
+          ))),
+          div(id = "proj_report_div", style = "display:none;",
+              fluidRow(
+                valueBoxOutput("total_labour_profit"),
+                valueBoxOutput("total_material_profit"),
+                valueBoxOutput("total_profit")
+              ),
+              fluidRow(
+                valueBoxOutput("total_material_cost", width = 3),
+                valueBoxOutput("total_material_charged", width = 3),
+                valueBoxOutput("total_labour_cost", width = 3),
+                valueBoxOutput("total_labour_charged", width = 3)
+              ),
+              fluidRow(
+                box(width = 12, title = "Material Invoiced", collapsible = TRUE,
+                  DTOutput("dt_invoice_material")
+                )
+              ),
+              fluidRow(
+                box(width = 7, title = "Labour Invoiced", collapsible = TRUE,
+                  DTOutput("dt_invoice_labour")
+                ),
+                box(width = 5, title = "Actual Labour", collapsible = TRUE,
+                  DTOutput("dt_project_labour")
+                )
+              )
+            )
+          ),
       tabItem(
         tabName = "project_admin",
         div(

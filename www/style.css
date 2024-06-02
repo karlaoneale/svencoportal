@@ -340,9 +340,11 @@ h2 {
         background-color: #011F5B !important; 
       }
       
-.small-box {
-  height: 510px !important;}
-  
-.small-box .icon-large {
-  font-size: 360px !important;
+      .small-box {
+    height: 85px;
+    margin-top: 5px;
+}
+
+.small-box h3{
+    font-size: 28px;
 }
