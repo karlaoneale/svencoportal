@@ -707,10 +707,11 @@ sync_invoices_and_projects <- function() {
       "invoice_status" = invoice_data$Results$Status,
       "customer" = invoice_data$Results$CustomerName
     )
+    # KARLA proj 3088
     projects <- get_query("SELECT projectname, customer, invoiceno, invoice_status FROM projects;") %>%
       mutate("project" = substr(projectname, 1,4))
     merged_projects <- merge(projects, invoices, by = c("project", "customer"), all.x = TRUE) %>%
-      filter((is.na(invoiceno.x) & !is.na(invoiceno.y)) | (is.na(invoice_status.x) & !is.na(invoice_status.y)) | invoice_status.x != invoice_status.y)
+      filter((is.na(invoiceno.x) & !is.na(invoiceno.y)) | (is.na(invoice_status.x) & !is.na(invoice_status.y)) | invoice_status.x != invoice_status.y & project!="3088")
     if (nrow(merged_projects)>0) {
       for (i in 1:nrow(merged_projects)) {
         execute(paste0("UPDATE projects SET invoiceno = '", merged_projects$invoiceno.y[i], "', invoice_status = '", merged_projects$invoice_status.y[i], "' WHERE projectname = '",merged_projects$projectname[i],"';"))
