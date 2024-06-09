@@ -20,6 +20,9 @@ library(RSQLite)
 library(jpeg)  # or use 'png' if your image is in PNG format
 library(googledrive)
 library(RCurl)
+library(githubinstall)
+
+githubinstall("shinyStore")
 library(shinyStore)
 
 source("functions.R")
