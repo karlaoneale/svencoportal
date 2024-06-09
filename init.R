@@ -4,7 +4,7 @@
 #
 my_packages = c("httr", "shinyjs", "DT", "ggplot2", "tidyr", "dplyr", "googledrive", "shiny", "googlesheets4", 
                 "shinydashboard", "RCurl", "googledrive", "jpeg", "RSQLite", "shinyWidgets", "xml2",
-                "colourpicker", "daterangepicker", "timevis", "lubridate", "jsonlite", "RPostgres", "DBI")
+                "colourpicker", "daterangepicker", "timevis", "lubridate", "jsonlite", "RPostgres", "DBI", "githubinstall")
 install_if_missing = function(p) {
   if (p %in% rownames(installed.packages()) == FALSE) {
     install.packages(p)
@@ -14,5 +14,5 @@ invisible(sapply(my_packages, install_if_missing))
 
 install.packages("devtools")
 
-library(devtools)
-install_github("trestletech/shinyStore")
+library(githubinstall)
+githubinstall("shinyStore")
