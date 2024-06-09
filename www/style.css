@@ -348,3 +348,7 @@ h2 {
 .small-box h3{
     font-size: 28px;
 }
+
+.skin-blue .left-side, .skin-blue .main-sidebar, .skin-blue .wrapper {
+    background-color: #011F5B;
+}

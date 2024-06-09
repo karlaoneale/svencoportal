@@ -2,7 +2,8 @@ server <- function(input, output, session) {
   if (is.null(isolate(input$store)$user)) {
     updateTabItems(session, "sidebartabs", "login_page")
     sidebar_tabs_toggle(c("login_page"), session, action = "show")
-    sidebar_tabs_toggle(c("project_report", "user_management", "purchases", "project_planner", "timeline_overview", "project_admin", "blank_page" ,"logout_page"), session, action = "hide")
+    shinyjs::hide("sidebarCollapsed")
+    # sidebar_tabs_toggle(c("project_cost_report", "project_report", "user_management", "purchases", "project_planner", "timeline_overview", "project_admin", "blank_page" ,"logout_page"), session, action = "hide")
   } else if (!is.null(isolate(input$store)$currenttab_in_store)){
     updateTabItems(session, "sidebartabs", isolate(input$store)$currenttab_in_store)
     sidebar_tabs_toggle(c("blank_page", "login_page"), session, action = "hide")
@@ -28,9 +29,9 @@ server <- function(input, output, session) {
       LoggedIn(T)
       session$user <- u
       updateStore(session, 'user', u)
-      sidebar_tabs_toggle(c("project_report", "user_management", "purchases", "project_planner", "timeline_overview", "project_admin", "logout_page"), session, action = "show")
+      # sidebar_tabs_toggle(c("project_cost_report", "project_report", "user_management", "purchases", "project_planner", "timeline_overview", "project_admin", "logout_page"), session, action = "show")
       sidebar_tabs_toggle(c("login_page", "blank_page"), session, action = "hide")
-      # browser()
+      shinyjs::show("sidebarCollapsed")
       if (is.null(input$store$currenttab_in_store) || input$store$currenttab_in_store == 'login_page') tab <- "project_admin"
       else tab <- input$store$currenttab_in_store
       updateTabItems(session, "sidebartabs", tab)
@@ -146,7 +147,7 @@ server <- function(input, output, session) {
           ),
           actionButton(
             inputId = "confirm_proj_status_update",
-            label = "Update Status",
+            label = "Add Item",
             icon = icon("check"),
             class = "back"
           )
@@ -1419,5 +1420,194 @@ server <- function(input, output, session) {
                   options = list(searching = FALSE,lengthChange = FALSE))
       })
     })
+  })
+  
+  # Project Cost Report Page ----
+  cost_report_projects <- reactiveVal()
+  cost_report_timesheets <- reactiveVal(data.frame())
+  reactive_cost_labour <- reactiveVal(data.frame(Name=c(), "Hours"=c(), "Total Cost"=c()))
+  reactive_cost_material <- reactiveVal(data.frame(Description=c(), Qty=c(), "Unit Price"=c(), "Total"=c(), Comments=c(), `Unit Cost`=c()))
+  
+  observeEvent(input$sidebartabs, {
+    req(input$sidebartabs == "project_cost_report")
+    cost_report_projects(get_query("SELECT projectid, projectname FROM projects"))
+    choices <- c("Select Project",cost_report_projects()$projectid)
+    names(choices) <- c("Select Project",cost_report_projects()$projectname)
+    updateSelectInput(session, "cost_report_project", choices=choices)
+  })
+  
+  observeEvent(input$generate_cost_report, {
+    projectid <- input$cost_report_project
+    projectname <- cost_report_projects()[which(cost_report_projects()$projectid == projectid),'projectname']
+    cost_report_timesheets(get_timesheets(input$cost_report_project)$Results)
+    
+    users <- get_query("SELECT name, cost FROM active_ts")
+    cost_items <- get_query(paste0("SELECT * FROM item_costs WHERE projectname = '", input$cost_report_project, "';")) 
+    if (nrow(cost_items)==0) orders <- get_query(paste0("SELECT id, itemdescription FROM orders WHERE project = '", projectname, "';"))
+    
+    reactive_cost_labour(
+        data <- isolate(cost_report_timesheets()) %>%
+          group_by(Name) %>%
+          mutate(Hours = if ("HoursCaptured" %in% names(.)) replace_na(HoursCaptured, 0) else 0,
+                 Name = strsplit(Name, " ")[[1]][1]) %>%
+          summarize(total_hours = sum(Hours)) %>%
+          left_join(users, by = c("Name" = "name")) %>%
+          mutate("Cost" = round(total_hours*cost,2), "total_hours"=round(total_hours,2)) %>%
+          select(Name, total_hours, Cost) %>%
+          rename("Hours" = total_hours) 
+    )
+    reactive_cost_material(
+      if (nrow(cost_items)==0) data <- orders %>%
+        mutate(UnitCost = 0, Qty = 1) %>%
+        mutate(`Total Cost` = UnitCost * Qty) %>%
+        select(itemdescription, Qty, UnitCost, `Total Cost`) %>%
+        rename("Description" = itemdescription, "Unit Cost"=UnitCost)
+      else data <- cost_items %>%
+          mutate(`Total Cost` = unitcost * qty) %>%
+          select(description, qty, unitcost, `Total Cost`) %>%
+          rename("Description" = description, "Qty"=qty, "Unit Cost"=unitcost)
+    )
+    shinyjs::show("cost_report_div")
+  })
+  
+  observeEvent(input$cost_report_project, {
+    shinyjs::hide("cost_report_div")
+    shinyjs::disable("update_cost_data")
+  })
+  
+  output$dt_cost_labour <- renderDT({
+    datatable(reactive_cost_labour(), rownames = FALSE, 
+              options = list(searching = FALSE,lengthChange = FALSE))
+  })
+  
+  output$dt_cost_material <- renderDT({
+    datatable(reactive_cost_material(), rownames = FALSE, 
+              options = list(searching = FALSE,lengthChange = FALSE),
+              editable = list(target = 'cell', disable = list(columns = c(0,3)))
+    )
+  })
+  
+  observeEvent(input$dt_cost_material_cell_edit, {
+    info <- input$dt_cost_material_cell_edit
+    newData <- reactive_cost_material()
+    newData[info$row, info$col + 1] <- as.numeric(info$value)
+    reactive_cost_material(newData %>% mutate(`Total Cost` = Qty*`Unit Cost`))
+    shinyjs::enable("update_cost_data")
+  })
+  
+  observeEvent(input$update_cost_data, {
+    execute(paste0("DELETE FROM item_costs WHERE projectname = '", input$cost_report_project, "';"))  
+    df <- data.frame(
+      description=reactive_cost_material()$Description,
+      qty=reactive_cost_material()$Qty,
+      unitcost=reactive_cost_material()$`Unit Cost`,
+      projectname=input$cost_report_project
+    )
+    con <- dbConnect(RPostgres::Postgres(), user = "u2tnmv2ufe7rpk", password = "p899046d336be15351280fd542015420a8e18e22dfe07c1cccaaa8e0e9fb20631", host = "cdgn4ufq38ipd0.cluster-czz5s0kz4scl.eu-west-1.rds.amazonaws.com", port = 5432, dbname = "d6qh1puq26hrth")
+    dbWriteTable(con, "item_costs", df, append = TRUE, row.names = FALSE)
+    shinyjs::disable("update_cost_data")
+  })
+  
+  observeEvent(input$add_cost_data, {
+    modalDialog(
+      title = "Add Item to Project Costing Model",
+      div(
+        style = "display:inline-block",
+        textInput(
+          "add_cost_data_description",
+          "Item Description:",
+          value = "",
+          width = "270px"
+        ),
+        numericInput(
+          "add_cost_data_qty",
+          "Quantity Used:",
+          value = 1,
+          min = 0,
+          width = "270px"
+        ),
+        numericInput(
+          "add_cost_data_unitcost",
+          "Cost per Unit:",
+          value = 1,
+          min = 0,
+          step = 100,
+          width = "270px"
+        )
+      ),
+      size = "s",
+      easyClose = FALSE,
+      footer = div(
+        class = "pull-right container",
+        actionButton(
+          inputId = "dismiss_modal",
+          label = "Close",
+          icon = icon("xmark"),
+          class = "add_proj"
+        ),
+        actionButton(
+          inputId = "add_cost_data_confirm",
+          label = "Update Status",
+          icon = icon("check"),
+          class = "back"
+        )
+      )
+    ) %>% showModal()
+  })
+  
+  observeEvent(input$add_cost_data_confirm, {
+    row <- data.frame(
+      "Description"=input$add_cost_data_description,
+      "Qty"=input$add_cost_data_qty,
+      "UnitCost"=input$add_cost_data_unitcost
+    )
+    reactive_cost_material(bind_rows(reactive_cost_material(), row %>% rename("Unit Cost"=UnitCost)) %>% mutate(`Total Cost` = Qty*`Unit Cost`))
+    removeModal()
+    shinyjs::enable("update_cost_data")
+  })
+  
+  
+  output$material_cost <- renderValueBox({
+    totalcost <- round(sum(reactive_cost_material()$`Unit Cost` * reactive_cost_material()$Qty, na.rm = TRUE),2)
+    valueBox(
+      value = paste("R",totalcost),
+      subtitle = "Material Cost",
+      icon = icon("cubes-stacked"),
+      color = "orange"
+    )
+  })
+  
+  output$labour_cost <- renderValueBox({
+    totalprice <- round(sum(reactive_cost_labour()$Cost, na.rm = TRUE),2)
+    valueBox(
+      value =paste("R",totalprice),
+      subtitle = "Labour Cost",
+      icon = icon("clock"),
+      color = "orange"
+    )
+  })
+  
+  output$labour_gap <- renderValueBox({
+    budget <- input$cost_report_labour_budget
+    totalcost <- sum(reactive_cost_labour()$Cost, na.rm = TRUE)
+    prof <- round(budget-totalcost,2)
+    valueBox(
+      value = paste("R",abs(prof)),
+      subtitle = ifelse(prof>=0, "Labour Under Budget", "Labour Over Budget"),
+      icon = icon("chart-simple"),
+      color = ifelse(prof>=0, "green", "red")
+    )
+  })
+  
+  output$material_gap <- renderValueBox({
+    budget <- input$cost_report_material_budget
+    totalcost <- sum(reactive_cost_material()$`Unit Cost` * reactive_cost_material()$Qty, na.rm = TRUE)
+    prof <- round(budget-totalcost,2)
+    valueBox(
+      value = paste("R",abs(prof)),
+      subtitle = ifelse(prof>=0, "Material Under Budget", "Material Over Budget"),
+      icon = icon("chart-simple"),
+      color = ifelse(prof>=0, "green", "red")
+    )
   })
 }

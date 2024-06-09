@@ -17,7 +17,9 @@ dashboardPage(
                      menuItem("Project Planner", tabName = "project_planner", icon = icon("calendar-days")),
                      menuItem("Purchases", tabName = "purchases", icon = icon("cart-shopping")),
                      menuItem("User Management", tabName = "user_management", icon = icon("users")),
-                     menuItem("Project Report", tabName = "project_report", icon = icon("chart-line"))
+                     menuItem("Reports", icon = icon("chart-line"),
+                              menuSubItem("Profit Report", 'project_report'),
+                              menuSubItem("Project Cost", 'project_cost_report'))
                    ),
                    tags$script(HTML("Shiny.addCustomMessageHandler('manipulateMenuItem', function(message){
                        var aNodeList = document.getElementsByTagName('a');
@@ -66,7 +68,7 @@ dashboardPage(
             column(width = 4, div(class = "custom-selectize", selectizeInput(width = "400px", "proj_plan", label = NULL, choices=c("Loading...")))),
             #selectizeInput(width = "250px", "proj_plan", label = NULL, choices=c("Loading...")),
             column(width = 1, actionButton(inputId = "projAdminHelp", label = "",icon = icon("question"), class = "back", 
-                                           onclick = "window.open('https://docs.google.com/document/d/1-xM7oF17Uzbx4fKCS0hfL2pqOU9pGMmshOmE0wuZFC8/edit?usp=sharing', '_blank')"),),
+                                           onclick = "window.open('https://docs.google.com/document/d/1-xM7oF17Uzbx4fKCS0hfL2pqOU9pGMmshOmE0wuZFC8/edit?usp=sharing', '_blank')")),
             column(width = 5, actionButton(inputId = "refreshProjects", label = "",icon = icon("rotate-right"), class = "back")),
             #actionButton(inputId = "addTask", label = "Add Task",icon = icon("plus"), class = "add_proj")
             column(width = 2, actionButton(inputId = "addTask", label = "Add Task",icon = icon("plus"), class = "add_proj"))
@@ -170,6 +172,38 @@ dashboardPage(
               )
             )
           ),
+      tabItem(
+        tabName = "project_cost_report",
+        div(fluidRow( box(width=12,style="padding:0px;",
+                          column(width=4,selectInput("cost_report_project", "Project: ", c("Loading..."))),
+                          column(width=2,numericInput("cost_report_material_budget", "Material Budget:",0, min=0, step=100)),
+                          column(width=2,numericInput("cost_report_labour_budget", "Labour Budget:",0, min=0, step=100)),
+                          column(width = 4,
+                                 br(),
+                                 column(width=6,actionButton(inputId = "generate_cost_report", label = "Generate Report", class = "back"))
+                          )
+        ))),
+        div(id = "cost_report_div", style = "display:none;",
+            fluidRow(
+              valueBoxOutput("material_cost", width = 3),
+              valueBoxOutput("labour_cost", width = 3),
+              valueBoxOutput("material_gap", width = 3),
+              valueBoxOutput("labour_gap", width = 3)
+            ),
+            fluidRow(
+              box(width = 8, title = "Material", collapsible = TRUE,
+                  DTOutput("dt_cost_material"),
+                  br(),
+                  fluidRow(column(7), 
+                           column(2, actionButton(inputId = "add_cost_data", label = "Add Item", class = "back")),
+                           column(3, actionButton(inputId = "update_cost_data", label = "Save Changes", class = "back")))
+              ),
+              box(width = 4, title = "Labour", collapsible = TRUE,
+                  DTOutput("dt_cost_labour")
+              )
+            )
+        )
+      ),
       tabItem(
         tabName = "project_admin",
         div(
