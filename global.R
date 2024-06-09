@@ -20,6 +20,7 @@ library(RSQLite)
 library(jpeg)  # or use 'png' if your image is in PNG format
 library(googledrive)
 library(RCurl)
+library(shinyStore)
 
 source("functions.R")
 
@@ -44,3 +45,7 @@ progress_icons <- c("Not Started" = "circle", "In Progress" = "circle-half-strok
 
 templates_that_req_actions <- c("task_complete", "task_time", "task_time_reminder", "request_payment_without_quote", "invoice_approval", "quote_approval",
                                 "request_quote_pmt", "all_tasks_completed", "start_invoice", "new_order", "quote_no_pmt")
+
+LoggedIn <- reactiveVal(FALSE)
+
+print("0")

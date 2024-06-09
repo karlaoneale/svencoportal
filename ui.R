@@ -8,13 +8,30 @@ dashboardPage(
   
   dashboardSidebar(sidebarMenu(
                      id = "sidebartabs",
+                     collapsed = TRUE,
+                     menuItem("", tabName = "blank_page"),
+                     menuItem("Log In", tabName = "login_page", icon = icon("user")),
+                     menuItem("Log Out", tabName = "logout_page", icon = icon("user")),
                      menuItem("Project Admin", tabName = "project_admin", icon = icon("list-check")),
                      menuItem("Timeline Overview",tabName = "timeline_overview", icon = icon("timeline")),
                      menuItem("Project Planner", tabName = "project_planner", icon = icon("calendar-days")),
                      menuItem("Purchases", tabName = "purchases", icon = icon("cart-shopping")),
                      menuItem("User Management", tabName = "user_management", icon = icon("users")),
                      menuItem("Project Report", tabName = "project_report", icon = icon("chart-line"))
-                   )
+                   ),
+                   tags$script(HTML("Shiny.addCustomMessageHandler('manipulateMenuItem', function(message){
+                       var aNodeList = document.getElementsByTagName('a');
+                       for (var i = 0; i < aNodeList.length; i++) {
+                        if (aNodeList[i].getAttribute('href').includes('#shiny-tab-'+message.tabName)){
+                          if (message.action == 'hide') {
+                            aNodeList[i].setAttribute('style', 'display:none;');
+                          } else {
+                            aNodeList[i].setAttribute('style', 'display:block;');
+                          };
+                        };
+                       }
+                       });")),
+                   initStore("store", "SvencoStore")
   ),
   
   dashboardBody(
@@ -31,6 +48,17 @@ dashboardPage(
       tags$link(rel = "icon", type = "image/png", sizes = "16x16", href = "favicon-16x16.png")
     ),
     tabItems(
+      tabItem(
+        tabName = "login_page",
+        column(4),
+        column(4,box(width=NULL,
+          textInput("username", "Enter Username:"),
+          passwordInput("password", "Enter Password:"),
+          actionButton("login", "Log In", class = "add_proj"),
+          textOutput("login_feedback")
+        )),
+        column(4)
+      ),
       tabItem(
         tabName = "project_planner",
         fluidRow(

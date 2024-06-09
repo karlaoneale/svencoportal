@@ -1,12 +1,55 @@
 server <- function(input, output, session) {
+  if (is.null(isolate(input$store)$user)) {
+    updateTabItems(session, "sidebartabs", "login_page")
+    sidebar_tabs_toggle(c("login_page"), session, action = "show")
+    sidebar_tabs_toggle(c("project_report", "user_management", "purchases", "project_planner", "timeline_overview", "project_admin", "blank_page" ,"logout_page"), session, action = "hide")
+  } else if (!is.null(isolate(input$store)$currenttab_in_store)){
+    updateTabItems(session, "sidebartabs", isolate(input$store)$currenttab_in_store)
+    sidebar_tabs_toggle(c("blank_page", "login_page"), session, action = "hide")
+  }
+  
+  observeEvent(input$sidebartabs, {
+    if (input$sidebartabs == "logout_page") logout()
+    updateStore(session, 'currenttab_in_store', input$sidebartabs)
+  })
+  
+  session$onSessionEnded(function(){
+    session$user=NULL
+    isolate({
+      print(paste("Tab at Logout in store:", input$store$currenttab_in_store))
+    })
+  })
+  
+  observeEvent(input$login, {
+    u <- input$username
+    p <- input$password
+    saved_pwd <- get_query(paste0("SELECT password FROM users WHERE name = '", u, "';"))$password
+    if (length(saved_pwd)==1) {
+      LoggedIn(T)
+      session$user <- u
+      updateStore(session, 'user', u)
+      sidebar_tabs_toggle(c("project_report", "user_management", "purchases", "project_planner", "timeline_overview", "project_admin", "logout_page"), session, action = "show")
+      sidebar_tabs_toggle(c("login_page", "blank_page"), session, action = "hide")
+      # browser()
+      if (is.null(input$store$currenttab_in_store) || input$store$currenttab_in_store == 'login_page') tab <- "project_admin"
+      else tab <- input$store$currenttab_in_store
+      updateTabItems(session, "sidebartabs", tab)
+      print(paste0("This is the latest tab: ", tab))
+    } else {
+      output$login_feedback <- renderText("Login failed. Please ensure that you've entered the correct username and password.")
+    }
+  })
+  
+  logout <- function() {
+    LoggedIn(FALSE)
+    updateStore(session, 'user', NULL)
+    session$reload()
+  }
   
   # Reactive timer to call get_webhooks every 5 seconds
   autoInvalidate <- reactiveTimer(5000)
-  # Timer for connection of postgres every 4 mins
-  postgresTimer <- reactiveTimer(1000*60*4)
   new_webhooks <- reactiveVal()
-  con <- reactiveVal(dbConnect(RPostgres::Postgres(), user = "u2tnmv2ufe7rpk", password = "p899046d336be15351280fd542015420a8e18e22dfe07c1cccaaa8e0e9fb20631", host = "cdgn4ufq38ipd0.cluster-czz5s0kz4scl.eu-west-1.rds.amazonaws.com", port = 5432, dbname = "d6qh1puq26hrth"))
-  projects <- reactiveVal(get_projects(get_from_api("TimeTrackingProject","GetActiveProjects")))
+  projects <- reactiveVal()
   tasks_sheet <- reactiveVal()
   orders_data <- reactiveVal()
   
@@ -16,7 +59,7 @@ server <- function(input, output, session) {
   
   # observe({
   #   syncProj()
-    sync_invoices_and_projects()
+    # sync_invoices_and_projects() KARLA
   #   check_reminders()
   # })
   
@@ -52,7 +95,8 @@ server <- function(input, output, session) {
         "notes" = NA,
         "active" = TRUE
       )
-      dbWriteTable(con(), "projects", add, append = TRUE, overwrite = FALSE)
+      con <- dbConnect(RPostgres::Postgres(), user = "u2tnmv2ufe7rpk", password = "p899046d336be15351280fd542015420a8e18e22dfe07c1cccaaa8e0e9fb20631", host = "cdgn4ufq38ipd0.cluster-czz5s0kz4scl.eu-west-1.rds.amazonaws.com", port = 5432, dbname = "d6qh1puq26hrth")
+      dbWriteTable(con, "projects", add, append = TRUE, overwrite = FALSE)
     }
     if (input$show_only_incomplete_projects) proj_admin_table(proj_sheet %>% filter(status %in% c("Not Started", "In Progress", "Ready for QC", "To be Invoiced")) %>% arrange(desc(projectname)))
     else proj_admin_table(proj_sheet %>% arrange(desc(projectname)))
@@ -541,15 +585,17 @@ server <- function(input, output, session) {
   observeEvent(input$dismiss_modal, {
     removeModal()
   })
-  tasks <- reactiveVal(get_tasks(get_from_api("TimeTrackingTask","Get","$filter=Active eq true&includeProjectTasks=True&")))
+  tasks <- reactiveVal()
   
   
   # Project Management -----
   observeEvent(input$sidebartabs,{
     
     if (input$sidebartabs == "project_planner") {
+      tasks(get_tasks(get_from_api("TimeTrackingTask","Get","$filter=Active eq true&includeProjectTasks=True&")))
       tasks_sheet(unique(get_query("SELECT * FROM tasks")))
       proj_timevis_data <- reactiveVal(data.frame())
+      projects(get_projects(get_from_api("TimeTrackingProject","GetActiveProjects")))
       filtered_projects <- projects()
       
       choices_display <- paste0(filtered_projects$Name, " (", filtered_projects$Customer, ")")
@@ -881,7 +927,9 @@ server <- function(input, output, session) {
   # Timeline Overview page ----
   observeEvent(input$sidebartabs,{
     if (input$sidebartabs == "timeline_overview") {
+      tasks(get_tasks(get_from_api("TimeTrackingTask","Get","$filter=Active eq true&includeProjectTasks=True&")))
       tasks_sheet(unique(get_query("SELECT * FROM tasks")))
+      projects(get_projects(get_from_api("TimeTrackingProject","GetActiveProjects")))
       updateSelectizeInput(session, "tl_ov_employees", choices = c("All", unique(tasks_sheet()$employee)))
       updateSelectizeInput(session, "tl_ov_project", choices = c("All", unique(tasks_sheet()$projectname)))
       updateSelectizeInput(session, "tl_ov_task", choices = c("All", unique(tasks_sheet()$taskname)))
@@ -1184,191 +1232,192 @@ server <- function(input, output, session) {
   
   
   # Project Report Page ----
-  invoice_reactive <- reactive({
-    projects()
-    return(get_query("SELECT * FROM invoices"))
-  })
-  report_reactive <- reactiveVal({get_query("SELECT projectid, projectname, customer, invoiceno FROM projects WHERE invoiceno IS NOT NULL;")})
-  
-  lines_reactive <- reactive({
-    invoice_reactive()
-    return(get_query("SELECT * FROM invoice_lines"))
-  })
-  
-  observe({
-    updateSelectInput(session, "report_inv", choices = c("Select Invoice",report_reactive()$invoiceno), selected = "Select Invoice")
-    updateSelectInput(session, "report_ref", choices = c("Select Project",report_reactive()$projectname), selected = "Select Project")
-  })
-  
-  observeEvent(input$report_ref, {
-    req(!(input$report_ref %in% c("Loading...", "Select Project")))
-    print(paste("Generate project report:", input$report_ref))
-    inv <- (report_reactive() %>% filter(projectname == input$report_ref))[1,]
-    updateSelectInput(session, "report_inv", selected = inv$invoiceno)
-  })
-  
-  observeEvent(input$report_inv, {
-    req(!(input$report_inv %in% c("Loading...", "Select Invoice")))
-    print(paste("Generate project report:", input$report_inv))
-    inv <- (report_reactive() %>% filter(invoiceno == input$report_inv))[1,]
-    updateSelectInput(session, "report_ref", selected = inv$projectname)
-  })
-  
-  observeEvent(input$refreshProjectReport, {
-    sync_invoices_and_projects()
-    report_reactive(get_query("SELECT projectid, projectname, customer, invoiceno FROM projects WHERE invoiceno IS NOT NULL;"))
-    shinyjs::hide("proj_report_div")
-  })
-  
-  observeEvent(input$generate_report, {
-    shinyjs::show("proj_report_div")
-    timesheets <- get_timesheets((report_reactive() %>% filter(projectname == input$report_ref))$projectid)$Results
-    users <- get_query("SELECT * FROM active_ts")
+  observeEvent(input$sidebartabs, {
+    req(input$sidebartabs == "project_report")
+    projects(get_projects(get_from_api("TimeTrackingProject","GetActiveProjects")))
+    invoice_reactive <- reactiveVal({get_query("SELECT * FROM invoices")})
+    report_reactive <- reactiveVal({get_query("SELECT projectid, projectname, customer, invoiceno FROM projects WHERE invoiceno IS NOT NULL;")})
     
-    invoice_numbers <- strsplit(input$report_inv, "/")[[1]]
-    invoice_details <- data.frame()
-    for (i in 1:length(invoice_numbers)) {
-      i_details <- get_from_api("TaxInvoice", query_params = paste0("$filter=DocumentNumber eq '",invoice_numbers[i],"'&includeDetail=True&includeCustomerDetails=False&"))$Results
-      invoice_details <- invoice_details %>% bind_rows(i_details)
-    }
+    lines_reactive <- reactive({
+      invoice_reactive()
+      return(get_query("SELECT * FROM invoice_lines"))
+    })
     
+    observe({
+      updateSelectInput(session, "report_inv", choices = c("Select Invoice",report_reactive()$invoiceno), selected = "Select Invoice")
+      updateSelectInput(session, "report_ref", choices = c("Select Project",report_reactive()$projectname), selected = "Select Project")
+    })
     
-    reactive_invoice_material <- reactiveVal(
-      if (length(invoice_details) == 0) data.frame(
-        Description=c(), Qty=c(), "Unit Price"=c(), "Total"=c(), Comments=c(), `Unit Cost`=c())
-      else {
-        data <- invoice_details$Lines[[1]] %>%
-          mutate(UnitCost = if ("UnitCost" %in% names(.)) replace_na(UnitCost, 0) else 0) %>%
-          filter(Unit != "Hrs") %>%
-          mutate(`Unit Cost` = UnitCost * Quantity) %>%
-          select(Description, Quantity, UnitPriceExclusive, Exclusive, Comments, `Unit Cost`) %>%
-          rename("Qty" = Quantity, "Unit Price" = UnitPriceExclusive, "Total" = Exclusive)
+    observeEvent(input$report_ref, {
+      req(!(input$report_ref %in% c("Loading...", "Select Project")))
+      print(paste("Generate project report:", input$report_ref))
+      inv <- (report_reactive() %>% filter(projectname == input$report_ref))[1,]
+      updateSelectInput(session, "report_inv", selected = inv$invoiceno)
+    })
+    
+    observeEvent(input$report_inv, {
+      req(!(input$report_inv %in% c("Loading...", "Select Invoice")))
+      print(paste("Generate project report:", input$report_inv))
+      inv <- (report_reactive() %>% filter(invoiceno == input$report_inv))[1,]
+      updateSelectInput(session, "report_ref", selected = inv$projectname)
+    })
+    
+    observeEvent(input$refreshProjectReport, {
+      sync_invoices_and_projects()
+      report_reactive(get_query("SELECT projectid, projectname, customer, invoiceno FROM projects WHERE invoiceno IS NOT NULL;"))
+      shinyjs::hide("proj_report_div")
+    })
+    
+    observeEvent(input$generate_report, {
+      shinyjs::show("proj_report_div")
+      timesheets <- get_timesheets((report_reactive() %>% filter(projectname == input$report_ref))$projectid)$Results
+      users <- get_query("SELECT * FROM active_ts")
+      
+      invoice_numbers <- strsplit(input$report_inv, "/")[[1]]
+      invoice_details <- data.frame()
+      for (i in 1:length(invoice_numbers)) {
+        i_details <- get_from_api("TaxInvoice", query_params = paste0("$filter=DocumentNumber eq '",invoice_numbers[i],"'&includeDetail=True&includeCustomerDetails=False&"))$Results
+        invoice_details <- invoice_details %>% bind_rows(i_details)
       }
-    )
-    reactive_invoice_labour <- reactiveVal(
-      if (length(invoice_details) == 0) data.frame(
-        Description=c(), Qty=c(), "Unit Price"=c(), "Total"=c(), Comments=c())
-      else {
-        data <- invoice_details$Lines[[1]] %>%
-          filter(Unit == "Hrs") %>%
-          select(Description, Quantity, UnitPriceExclusive, Exclusive, Comments) %>%
-          rename("Qty" = Quantity, "Unit Price" = UnitPriceExclusive, "Total" = Exclusive)
-      }
-    )
-    reactive_project_labour <- reactiveVal(
-      if (length(timesheets) == 0) data.frame(Name=c(), "Hours"=c(), "Total Cost"=c())
-      else {
-        data <- timesheets %>%
-          group_by(Name) %>%
-          mutate(Hours = if ("HoursCaptured" %in% names(.)) replace_na(HoursCaptured, 0) else 0,
-                 Name = strsplit(Name, " ")[[1]][1]) %>%
-          summarize(total_hours = sum(Hours)) %>%
-          left_join(users, by = c("Name" = "name")) %>%
-          mutate("Cost" = total_hours*cost) %>%
-          select(Name, total_hours, Cost) %>%
-          rename("Hours" = total_hours) 
-      }
-    )
-    
-    output$dt_invoice_material <- renderDT({
-      datatable(reactive_invoice_material(), rownames = FALSE, 
-                options = list(searching = FALSE,lengthChange = FALSE),
-                editable = list(target = 'cell', disable = list(columns = c(0,1,2,3,4)))
+      
+      
+      reactive_invoice_material <- reactiveVal(
+        if (length(invoice_details) == 0) data.frame(
+          Description=c(), Qty=c(), "Unit Price"=c(), "Total"=c(), Comments=c(), `Unit Cost`=c())
+        else {
+          data <- invoice_details$Lines[[1]] %>%
+            mutate(UnitCost = if ("UnitCost" %in% names(.)) replace_na(UnitCost, 0) else 0) %>%
+            filter(Unit != "Hrs") %>%
+            mutate(`Unit Cost` = UnitCost * Quantity) %>%
+            select(Description, Quantity, UnitPriceExclusive, Exclusive, Comments, `Unit Cost`) %>%
+            rename("Qty" = Quantity, "Unit Price" = UnitPriceExclusive, "Total" = Exclusive)
+        }
       )
-    })
-    
-    observeEvent(input$dt_invoice_material_cell_edit, {
-      info <- input$dt_invoice_material_cell_edit
-      new_unit_cost <- input$dt_invoice_material_cell_edit$value
-      newData <- reactive_invoice_material()
-      newData[info$row, info$col + 1] <- as.numeric(info$value)
-      reactive_invoice_material(newData)
-    })
-    
-    output$total_material_cost <- renderValueBox({
-      totalcost <- round(sum(reactive_invoice_material()$`Unit Cost` * reactive_invoice_material()$Qty, na.rm = TRUE),2)
-      valueBox(
-        value = paste("R",totalcost),
-        subtitle = "Material Cost",
-        icon = icon("cubes-stacked"),
-        color = "orange"
+      reactive_invoice_labour <- reactiveVal(
+        if (length(invoice_details) == 0) data.frame(
+          Description=c(), Qty=c(), "Unit Price"=c(), "Total"=c(), Comments=c())
+        else {
+          data <- invoice_details$Lines[[1]] %>%
+            filter(Unit == "Hrs") %>%
+            select(Description, Quantity, UnitPriceExclusive, Exclusive, Comments) %>%
+            rename("Qty" = Quantity, "Unit Price" = UnitPriceExclusive, "Total" = Exclusive)
+        }
       )
-    })
-    
-    output$dt_invoice_labour <- renderDT({
-      datatable(reactive_invoice_labour(), rownames = FALSE, 
-                options = list(searching = FALSE,lengthChange = FALSE))
-    })
-    
-    output$total_labour_charged <- renderValueBox({
-      totalprice <- round(sum(reactive_invoice_labour()$Total, na.rm = TRUE),2)
-      valueBox(
-        value = paste("R",totalprice),
-        subtitle = "Labour Income",
-        icon = icon("clock"),
-        color = "orange"
+      reactive_project_labour <- reactiveVal(
+        if (length(timesheets) == 0) data.frame(Name=c(), "Hours"=c(), "Total Cost"=c())
+        else {
+          data <- timesheets %>%
+            group_by(Name) %>%
+            mutate(Hours = if ("HoursCaptured" %in% names(.)) replace_na(HoursCaptured, 0) else 0,
+                   Name = strsplit(Name, " ")[[1]][1]) %>%
+            summarize(total_hours = sum(Hours)) %>%
+            left_join(users, by = c("Name" = "name")) %>%
+            mutate("Cost" = total_hours*cost) %>%
+            select(Name, total_hours, Cost) %>%
+            rename("Hours" = total_hours) 
+        }
       )
-    })
-    
-    output$total_labour_cost <- renderValueBox({
-      totalprice <- round(sum(reactive_project_labour()$Cost, na.rm = TRUE),2)
-      valueBox(
-        value =paste("R",totalprice),
-        subtitle = "Labour Cost",
-        icon = icon("clock"),
-        color = "orange"
-      )
-    })
-    
-    output$total_material_charged <- renderValueBox({
-      totalprice <- round(sum(reactive_invoice_material()$Total, na.rm = TRUE),2)
-      valueBox(
-        value = paste("R",totalprice),
-        subtitle = "Material Income",
-        icon = icon("cubes-stacked"),
-        color = "orange"
-      )
-    })
-    
-    output$total_labour_profit <- renderValueBox({
-      totalprice <- sum(reactive_invoice_labour()$Total, na.rm = TRUE)
-      totalcost <- sum(reactive_project_labour()$Cost, na.rm = TRUE)
-      prof <- round(totalprice-totalcost,2)
-      valueBox(
-        value = paste("R",abs(prof)),
-        subtitle = ifelse(prof>=0, "Labour Profit", "Labour Loss"),
-        icon = icon("chart-simple"),
-        color = ifelse(prof>=0, "green", "red")
-      )
-    })
-    
-    output$total_material_profit <- renderValueBox({
-      totalprice <- sum(reactive_invoice_material()$Total, na.rm = TRUE)
-      totalcost <- sum(reactive_invoice_material()$`Unit Cost` * reactive_invoice_material()$Qty, na.rm = TRUE)
-      prof <- round(totalprice-totalcost,2)
-      valueBox(
-        value = paste("R",abs(prof)),
-        subtitle = ifelse(prof>=0, "Material Profit", "Material Loss"),
-        icon = icon("chart-simple"),
-        color = ifelse(prof>=0, "green", "red")
-      )
-    })
-    
-    output$total_profit <- renderValueBox({
-      totalprice <- sum(reactive_invoice_labour()$Total, na.rm = TRUE) + sum(reactive_invoice_material()$Total, na.rm = TRUE)
-      totalcost <- sum(reactive_project_labour()$Cost, na.rm = TRUE) + sum(reactive_invoice_material()$`Unit Cost` * reactive_invoice_material()$Qty, na.rm = TRUE)
-      prof <- round(totalprice-totalcost,2)
-      valueBox(
-        value = paste("R",abs(prof)),
-        subtitle = ifelse(prof>=0, "Total Profit", "Total Loss"),
-        icon = icon("chart-simple"),
-        color = ifelse(prof>=0, "green", "red")
-      )
-    })
-    
-    output$dt_project_labour <- renderDT({
+      
+      output$dt_invoice_material <- renderDT({
+        datatable(reactive_invoice_material(), rownames = FALSE, 
+                  options = list(searching = FALSE,lengthChange = FALSE),
+                  editable = list(target = 'cell', disable = list(columns = c(0,1,2,3,4)))
+        )
+      })
+      
+      observeEvent(input$dt_invoice_material_cell_edit, {
+        info <- input$dt_invoice_material_cell_edit
+        new_unit_cost <- input$dt_invoice_material_cell_edit$value
+        newData <- reactive_invoice_material()
+        newData[info$row, info$col + 1] <- as.numeric(info$value)
+        reactive_invoice_material(newData)
+      })
+      
+      output$total_material_cost <- renderValueBox({
+        totalcost <- round(sum(reactive_invoice_material()$`Unit Cost` * reactive_invoice_material()$Qty, na.rm = TRUE),2)
+        valueBox(
+          value = paste("R",totalcost),
+          subtitle = "Material Cost",
+          icon = icon("cubes-stacked"),
+          color = "orange"
+        )
+      })
+      
+      output$dt_invoice_labour <- renderDT({
+        datatable(reactive_invoice_labour(), rownames = FALSE, 
+                  options = list(searching = FALSE,lengthChange = FALSE))
+      })
+      
+      output$total_labour_charged <- renderValueBox({
+        totalprice <- round(sum(reactive_invoice_labour()$Total, na.rm = TRUE),2)
+        valueBox(
+          value = paste("R",totalprice),
+          subtitle = "Labour Income",
+          icon = icon("clock"),
+          color = "orange"
+        )
+      })
+      
+      output$total_labour_cost <- renderValueBox({
+        totalprice <- round(sum(reactive_project_labour()$Cost, na.rm = TRUE),2)
+        valueBox(
+          value =paste("R",totalprice),
+          subtitle = "Labour Cost",
+          icon = icon("clock"),
+          color = "orange"
+        )
+      })
+      
+      output$total_material_charged <- renderValueBox({
+        totalprice <- round(sum(reactive_invoice_material()$Total, na.rm = TRUE),2)
+        valueBox(
+          value = paste("R",totalprice),
+          subtitle = "Material Income",
+          icon = icon("cubes-stacked"),
+          color = "orange"
+        )
+      })
+      
+      output$total_labour_profit <- renderValueBox({
+        totalprice <- sum(reactive_invoice_labour()$Total, na.rm = TRUE)
+        totalcost <- sum(reactive_project_labour()$Cost, na.rm = TRUE)
+        prof <- round(totalprice-totalcost,2)
+        valueBox(
+          value = paste("R",abs(prof)),
+          subtitle = ifelse(prof>=0, "Labour Profit", "Labour Loss"),
+          icon = icon("chart-simple"),
+          color = ifelse(prof>=0, "green", "red")
+        )
+      })
+      
+      output$total_material_profit <- renderValueBox({
+        totalprice <- sum(reactive_invoice_material()$Total, na.rm = TRUE)
+        totalcost <- sum(reactive_invoice_material()$`Unit Cost` * reactive_invoice_material()$Qty, na.rm = TRUE)
+        prof <- round(totalprice-totalcost,2)
+        valueBox(
+          value = paste("R",abs(prof)),
+          subtitle = ifelse(prof>=0, "Material Profit", "Material Loss"),
+          icon = icon("chart-simple"),
+          color = ifelse(prof>=0, "green", "red")
+        )
+      })
+      
+      output$total_profit <- renderValueBox({
+        totalprice <- sum(reactive_invoice_labour()$Total, na.rm = TRUE) + sum(reactive_invoice_material()$Total, na.rm = TRUE)
+        totalcost <- sum(reactive_project_labour()$Cost, na.rm = TRUE) + sum(reactive_invoice_material()$`Unit Cost` * reactive_invoice_material()$Qty, na.rm = TRUE)
+        prof <- round(totalprice-totalcost,2)
+        valueBox(
+          value = paste("R",abs(prof)),
+          subtitle = ifelse(prof>=0, "Total Profit", "Total Loss"),
+          icon = icon("chart-simple"),
+          color = ifelse(prof>=0, "green", "red")
+        )
+      })
+      
+      output$dt_project_labour <- renderDT({
         datatable(reactive_project_labour(), rownames = FALSE, 
                   options = list(searching = FALSE,lengthChange = FALSE))
+      })
     })
   })
 }

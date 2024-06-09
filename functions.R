@@ -1,6 +1,7 @@
 con <- dbConnect(RPostgres::Postgres(), user = "u2tnmv2ufe7rpk", password = "p899046d336be15351280fd542015420a8e18e22dfe07c1cccaaa8e0e9fb20631", host = "cdgn4ufq38ipd0.cluster-czz5s0kz4scl.eu-west-1.rds.amazonaws.com", port = 5432, dbname = "d6qh1puq26hrth")
 
 get_query <- function(query) {
+  print(paste("get_query:", query))
   a <- tryCatch({
     a <- dbGetQuery(con, query)
   }, 
@@ -13,6 +14,7 @@ get_query <- function(query) {
 }
 
 execute <- function(query) {
+  print(paste("execute:", query))
   tryCatch({
     dbExecute(con, query)
   }, 
@@ -38,6 +40,7 @@ get_wa_id <- function(name) {return(get_query(paste0("SELECT wa_number FROM acti
 get_name_from_wa_id <- function(wa_id) {return(get_query(paste0("SELECT name FROM active_ts WHERE wa_number = '",wa_id,"';"))$name)}
 
 get_from_api <- function(param, action = "Get", query_params = "") {
+  print(paste0("api: ", param, "/", action))
   url <- paste0(api_url, param, "/", action, "?", URLencode(query_params), "companyid=", companyid, "&apikey=", apikey)
   response <- GET(url, authenticate(username, password))
   
@@ -53,6 +56,7 @@ get_from_api <- function(param, action = "Get", query_params = "") {
 }
 
 get_projects <- function(parsed_data) {
+  print(paste("get_projects"))
   extracted_data <- data.frame(
     ID = as.character(parsed_data$Results$ID),
     Name = parsed_data$Results$Name,
@@ -63,6 +67,7 @@ get_projects <- function(parsed_data) {
 }
 
 get_tasks <- function(parsed_data) {
+  print(paste("get_tasks"))
   ProjectTasks <- parsed_data$Results$ProjectTasks
   proj_vector <- c()
   for (task in ProjectTasks) {
@@ -77,6 +82,7 @@ get_tasks <- function(parsed_data) {
 }
 
 get_customers <- function() {
+  print(paste("get_customers"))
   parsed_data <- get_from_api("TimeTrackingCustomer", query_params = "$filter=Active eq true&")
   data.frame(
     CustomerID <- parsed_data$Results$ID,
@@ -85,14 +91,17 @@ get_customers <- function() {
 }
 
 get_next_project <- function(projects) {
+  print(paste("get_next_project"))
   next_p <- max(as.numeric(substr(projects()$Name, 1, 4))) + 1
 }
 
 get_users <- function(parsed_data) {
+  print(paste("get_users"))
   extracted_data <- data.frame("FirstName"=parsed_data$Results$FirstName, "ID"=parsed_data$Results$ID, "Cost"=parsed_data$Results$CostPerHour)
 }
 
 post_to_api <- function(param, data) {
+  print(paste("post api:", param))
   url <- paste0(api_url,param,"/Save?companyid=",companyid,"&apikey=",apikey)
   body <- toJSON(as.list(data), auto_unbox = TRUE)
   response <- POST(url, encode = "json", body=body, authenticate(username, password),add_headers("Content-Type" = "application/json"))
@@ -109,6 +118,7 @@ post_to_api <- function(param, data) {
 }
 
 get_timesheets <- function(projectid) {
+  print(paste("get_timesheets"))
   url <- paste0(api_url,"TimeTrackingTimesheet/GetTimesheetSummaryDetail?companyid=",companyid,"&apikey=",apikey)
   body <- toJSON(list("Type"=4, "Date" = "2024-06-02", "RangeType"=0, "ProjectId"=projectid), auto_unbox = TRUE)
   response <- POST(url, encode = "json", body=body, authenticate(username, password),add_headers("Content-Type" = "application/json"))
@@ -125,6 +135,7 @@ get_timesheets <- function(projectid) {
 }
 
 post_to_api1 <- function(param, data) {
+  print(paste("post api:", param))
   url <- paste0(api_url,param,"/Save?companyid=",companyid,"&apikey=",apikey)
   body <- toJSON(as.list(data), auto_unbox = TRUE)
   response <- POST(url, encode = "json", body=body, authenticate(username, password),add_headers("Content-Type" = "application/json"))
@@ -141,6 +152,7 @@ post_to_api1 <- function(param, data) {
 }
 
 resetPage <- function() {
+  print(paste("resetPage"))
   proxy <- dataTableProxy("dt_employees")
   proxy %>% selectRows(selected = NULL)
   shinyjs::show("employees")
@@ -227,6 +239,7 @@ get_wa_id <- function(name) {
 }
 
 updateProjTimevis <- function(df) {
+  print(paste("updateProjTimevis"))
   d <-data.frame(
     id = df$taskid,
     content = templateTask(df$taskname, df$description, df$projectname, df$status),
@@ -349,6 +362,7 @@ get_new_webhooks <- function() {
 }
 
 get_WA_image_and_upload <- function(df, folder_name, project_name) {
+  print(paste("get_WA_image_and_upload"))
   url <- paste0(wa_api_url, df$attachmentid, "?","phone_number_id=", wa_from)
   response <- GET(url, add_headers("Authorization" = paste0("Bearer ",wa_token), "Content-Type" = "application/json"))
   
@@ -376,6 +390,7 @@ get_WA_image_and_upload <- function(df, folder_name, project_name) {
 }
 
 uploadToGoogleDrive <- function(image_binary, project_name, folder_name, filename = NULL) {
+  print(paste("uploadToGoogleDrive"))
   drive_auth(path = google_drive_service_acc)
   temp_image <- tempfile(fileext = ".jpg")
   writeBin(image_binary, temp_image)
@@ -405,6 +420,7 @@ uploadToGoogleDrive <- function(image_binary, project_name, folder_name, filenam
 }
 
 create_order <- function(message_details, drive_link = NULL) {
+  print(paste("create_order:", message_details$text))
   lastid <- max(get_query(paste0("SELECT id FROM orders;"))$id)
   projNumber <- substr(message_details$text, 2, 5)
   itemDescription <- trimws(substr(message_details$text, 7, nchar(message_details$text)), "left") 
@@ -445,6 +461,7 @@ create_order <- function(message_details, drive_link = NULL) {
 }
 
 add_note <- function(df) {
+  print(paste("add_note:", df$text))
   projNumber <- substr(df$text, 2, 5)
   note <- trimws(substr(df$text, 7, nchar(df$text)), "left") 
   from <- (get_query(paste0("SELECT name FROM active_ts WHERE wa_number = '",df$from,"';"))$name)[1]
@@ -469,6 +486,7 @@ add_note <- function(df) {
 }
 
 task_QC_passed <- function(task_details) {
+  print(paste("Task QC Passed:", task_details$task))
   execute(paste0("UPDATE tasks SET status = 'Completed' WHERE taskid = ", task_details$task, ";"))
   allstatuses <- get_query(paste0("SELECT status FROM tasks WHERE projectname = '", task_details$project, "';"))$status
   if (length(unique(allstatuses))==1 && unique(allstatuses) == "Completed") {
@@ -482,6 +500,7 @@ task_QC_passed <- function(task_details) {
 }
 
 tasks_ready_for_QC <- function(taskID) {
+  print(paste("Task QC Ready:", taskID))
   df <- get_query(paste0("SELECT * FROM tasks WHERE taskid = '", taskID, "';"))
   execute(paste0("UPDATE tasks SET status = 'Ready for QC' WHERE taskid = ", taskID, ";"))
   body <- list(
@@ -494,6 +513,7 @@ tasks_ready_for_QC <- function(taskID) {
 }
 
 handle_wa_button <- function(button_details, invoiceName=NULL) {
+  print(paste("Handle button"))
   if (button_details$type == "document") {
     accounts <- get_ac_wa()
     if (accounts == button_details$from) {
@@ -735,6 +755,7 @@ sync_invoices_and_projects <- function() {
 }
 
 send_invoice_to_AC <- function(message_details) {
+  print(paste("Inv to acc"))
   execute(paste0("UPDATE sent_wa SET responded = 'true' WHERE id = '", message_details$contextid, "';"))
   projectName <- get_query(paste0("SELECT project FROM sent_wa WHERE id = '", message_details$contextid, "';"))$project
   invoice_data <- (get_from_api(
@@ -786,6 +807,7 @@ send_invoice_to_AC <- function(message_details) {
 }
 
 send_invoice_to_customer <- function(invoiceNo, invoiceID, wa_id, customerName, projectName) {
+  print(paste("Inv to customer:", customerName))
   # Get document
   url <- paste0(api_url, "TaxInvoice/Export/", invoiceID, "?companyid=", companyid, "&apikey=", apikey)
   response <- GET(url, authenticate(username, password))
@@ -823,12 +845,14 @@ send_invoice_to_customer <- function(invoiceNo, invoiceID, wa_id, customerName, 
   } else return(FALSE)
 }
 
-get_active_projects <- function() {      
+get_active_projects <- function() {  
+  print(paste("get_active_projects"))    
   active_proj <- get_query(paste0("SELECT projectid FROM projects WHERE status IN ('Not Started', 'In Progress');"))$projectid
   projects <- get_projects(get_from_api("TimeTrackingProject","GetActiveProjects")) %>% filter(ID %in% active_proj)
 }
 
 forward_image <- function(df, from) {
+  print(paste("forward_image"))
   pm <- get_pm_wa()
   md <- get_md_wa()
   header <- list('type' = 'image', 'image' = list('id' = df$attachmentid))
@@ -913,5 +937,12 @@ send_reminder <- function(wa_id, context_id) {
   } else {
     print(paste("Error: API request failed with status code", status_code, " REMINDER: ", context_id))
     return(FALSE)
+  }
+}
+
+sidebar_tabs_toggle <- function(tabs, session, action="show") {
+  print(paste("Toggle tabs:", paste(tabs, collapse = ",")))
+  for (tab in tabs) {
+    session$sendCustomMessage(type = "manipulateMenuItem", message = list(action = action, tabName = tab))
   }
 }
