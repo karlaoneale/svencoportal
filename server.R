@@ -147,7 +147,7 @@ server <- function(input, output, session) {
           ),
           actionButton(
             inputId = "confirm_proj_status_update",
-            label = "Add Item",
+            label = "Update Status",
             icon = icon("check"),
             class = "back"
           )
@@ -1547,7 +1547,7 @@ server <- function(input, output, session) {
         ),
         actionButton(
           inputId = "add_cost_data_confirm",
-          label = "Update Status",
+          label = "Add Item",
           icon = icon("check"),
           class = "back"
         )
