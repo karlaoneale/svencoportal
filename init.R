@@ -3,19 +3,16 @@
 # Example R code to install packages if not already installed
 #
 my_packages = c("httr", "shinyjs", "DT", "ggplot2", "tidyr", "dplyr", "googledrive", "shiny", "googlesheets4", 
-                "shinydashboard", "RCurl", "googledrive", "jpeg", "RSQLite", "shinyWidgets", "xml2", "shinyStore",
+                "shinydashboard", "RCurl", "googledrive", "jpeg", "RSQLite", "shinyWidgets", "xml2",
                 "colourpicker", "daterangepicker", "timevis", "lubridate", "jsonlite", "RPostgres", "DBI")
 install_if_missing = function(p) {
-  if (!require(p, character.only = TRUE)) {
-    install.packages(p, dependencies = TRUE)
+  if (p %in% rownames(installed.packages()) == FALSE) {
+    install.packages(p)
   }
 }
 invisible(sapply(my_packages, install_if_missing))
 
-if (!require("shinyStore")) {
-  devtools::install_github("trestletech/shinyStore")
-}
+install.packages("devtools")
 
-if (!require("devtools")) {
-  install.packages("devtools")
-}
+library(devtools)
+install_github("trestletech/shinyStore")
