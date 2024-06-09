@@ -60,7 +60,7 @@ server <- function(input, output, session) {
   
   # observe({
   #   syncProj()
-    # sync_invoices_and_projects() KARLA
+    sync_invoices_and_projects()
   #   check_reminders()
   # })
   
