@@ -39,6 +39,12 @@ webhook_url <- "https://sedate-iced-nemophila.glitch.me/allMessages"
 wa_from <- "256491817549838"
 wa_token <- "EAAFaZBU3CdR4BOzWwoDOcpOzPnpk2rZA9TtAUkIomZCkQSUK9pAn4hhlHqZBpzfmKJR9SlsQHZAlNZC4MqctBZBgtZBP87aoo00SQlxZB3rZCG9Ol5T9U7ZBCxKtg714ZBQ7Yij8PEPH42BDqnumrhEdECwEFwctZAuiibrR4qvwoQaGAphqeWjbyMKZAEpEVz471tipOe"
 
+pg_host <- "cc4p3ft8ho9a46.cluster-czz5s0kz4scl.eu-west-1.rds.amazonaws.com"
+pg_db <- "d3olv1p65gn210"
+pg_user <- "u2tnmv2ufe7rpk"
+pg_port <- "5432"
+pg_pw <- "p3ce6aa9549ffaf137aaca3e1c796c72b330b9907334d997e00df29d9bad276dc"
+
 task_ids <- c("Fitting & Assembly" = "100989","Machining" = "93868","Other" = "94121","Welding & Fabrication" = "93864", "Breakfast Break" = "94538", "Cleaning" = "94538", "Driving Duty" = "93869", "HOD Meeting" = "145048", "Workshop Maintenance" = "116519")
 task_colors <- c("Fitting & Assembly" = "#118ab2","Machining" = "#06d6a0","Other" = "#ffd166","Welding & Fabrication" = "#ef476f", "Breakfast Break" = "#ff6b6b", "Cleaning" = "#7209b7", "Driving Duty" = "#ff9f1c", "HOD Meeting" = "#6a0572", "Workshop Maintenance" = "#118ab2")
 progress_icons <- c("Not Started" = "circle", "In Progress" = "circle-half-stroke", "Completed" = "circle")

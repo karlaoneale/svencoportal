@@ -1,4 +1,4 @@
-con <- dbConnect(RPostgres::Postgres(), user = "u2tnmv2ufe7rpk", password = "p899046d336be15351280fd542015420a8e18e22dfe07c1cccaaa8e0e9fb20631", host = "cdgn4ufq38ipd0.cluster-czz5s0kz4scl.eu-west-1.rds.amazonaws.com", port = 5432, dbname = "d6qh1puq26hrth")
+con <- dbConnect(RPostgres::Postgres(), user = pg_user, password = pg_pw, host = pg_host, port = pg_port, dbname = pg_db)
 
 get_query <- function(query) {
   print(paste("get_query:", query))
@@ -7,7 +7,7 @@ get_query <- function(query) {
   }, 
   error = function(e) {
     dbDisconnect(con)
-    con <- dbConnect(RPostgres::Postgres(), user = "u2tnmv2ufe7rpk", password = "p899046d336be15351280fd542015420a8e18e22dfe07c1cccaaa8e0e9fb20631", host = "cdgn4ufq38ipd0.cluster-czz5s0kz4scl.eu-west-1.rds.amazonaws.com", port = 5432, dbname = "d6qh1puq26hrth")
+    con <- dbConnect(RPostgres::Postgres(), user = pg_user, password = pg_pw, host = pg_host, port = pg_port, dbname = pg_db)
     a <- dbGetQuery(con, query)  
   })
   return(a)
@@ -20,7 +20,7 @@ execute <- function(query) {
   }, 
   error = function(e) {
     dbDisconnect(con)
-    con <- dbConnect(RPostgres::Postgres(), user = "u2tnmv2ufe7rpk", password = "p899046d336be15351280fd542015420a8e18e22dfe07c1cccaaa8e0e9fb20631", host = "cdgn4ufq38ipd0.cluster-czz5s0kz4scl.eu-west-1.rds.amazonaws.com", port = 5432, dbname = "d6qh1puq26hrth")
+    con <- dbConnect(RPostgres::Postgres(), user = pg_user, password = pg_pw, host = pg_host, port = pg_port, dbname = pg_db)
     dbExecute(con, query)        
   })
 }
@@ -261,7 +261,7 @@ get_new_webhooks <- function() {
     parsed_data <- fromJSON(api_data)
     if (length(parsed_data$messages) > 0) {
       dbDisconnect(con) 
-      con <<- dbConnect(RPostgres::Postgres(), user = "u2tnmv2ufe7rpk", password = "p899046d336be15351280fd542015420a8e18e22dfe07c1cccaaa8e0e9fb20631", host = "cdgn4ufq38ipd0.cluster-czz5s0kz4scl.eu-west-1.rds.amazonaws.com", port = 5432, dbname = "d6qh1puq26hrth")
+      con <<- dbConnect(RPostgres::Postgres(), user = pg_user, password = pg_pw, host = pg_host, port = pg_port, dbname = pg_db)
       received_df <- data.frame()
       sent_df <- data.frame()
       for (webhook in parsed_data$messages$body$entry) {
