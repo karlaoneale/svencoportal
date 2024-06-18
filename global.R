@@ -22,8 +22,6 @@ library(googledrive)
 library(RCurl)
 library(shinyStore)
 
-source("functions.R")
-
 google_drive_service_acc <- "svencoportal-46a05025cc4a.json"
 
 api_url <- "https://accounting.sageone.co.za/api/2.0.0/"
@@ -54,4 +52,5 @@ templates_that_req_actions <- c("task_complete", "task_time", "task_time_reminde
 
 LoggedIn <- reactiveVal(FALSE)
 
-print("0")
+
+source("functions.R")
