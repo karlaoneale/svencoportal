@@ -11,6 +11,13 @@ server <- function(input, output, session) {
   
   observeEvent(input$sidebartabs, {
     if (input$sidebartabs == "logout_page") logout()
+    # create_smtp_creds_key( id = "gmail",
+    #                        user = "karlaoneale@gmail.com",
+    #                        provider = "gmail",
+    #                        overwrite = TRUE)
+    smtp_send(compose_email(body = "hello this is test"), from = "karlaoneale@gmail.com", to = "karlaschoeman@gmail.com", subject = "Test", credentials = creds_key(
+      "gmail"
+    ))
     updateStore(session, 'currenttab_in_store', input$sidebartabs)
   })
   
