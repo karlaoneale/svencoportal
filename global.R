@@ -21,6 +21,7 @@ library(jpeg)  # or use 'png' if your image is in PNG format
 library(googledrive)
 library(RCurl)
 library(shinyStore)
+library(blastula)
 
 google_drive_service_acc <- "svencoportal-46a05025cc4a.json"
 

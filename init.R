@@ -4,7 +4,7 @@
 #
 my_packages <- c("httr", "shinyjs", "DT", "ggplot2", "tidyr", "dplyr", "googledrive", "shiny", "googlesheets4", 
                  "shinydashboard", "RCurl", "googledrive", "jpeg", "RSQLite", "shinyWidgets", "xml2", "colourpicker", 
-                 "daterangepicker", "timevis", "lubridate", "jsonlite", "RPostgres", "DBI")
+                 "daterangepicker", "timevis", "lubridate", "jsonlite", "RPostgres", "DBI", "blastula")
 
 install_if_missing <- function(p) {
   if (!requireNamespace(p, quietly = TRUE)) {
