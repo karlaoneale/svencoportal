@@ -23,7 +23,25 @@ server <- function(input, output, session) {
   })
   
   session$onSessionEnded(function(){
-    send_template(dev_wa_id, template_name = "app_error")
+    url <- paste0(wa_api_url,wa_from,"/messages")
+    body <- list(
+      "messaging_product" = "whatsapp",
+      "to" = dev_wa_id,
+      "type" = "template",
+      "template" = list(
+        "name" = "app_error",
+        "language" = list("code" = "en_US"),
+        "components" = list()
+      )
+    )
+    
+    response <- tryCatch({
+      response <- POST(url, encode = "json", body=body, add_headers("Authorization" = paste0("Bearer ",wa_token), "Content-Type" = "application/json"))
+    }, 
+    error = function(e) {
+      response <- POST(url, encode = "json", body=body, add_headers("Authorization" = paste0("Bearer ",wa_token), "Content-Type" = "application/json"))
+    })
+    
     session$user=NULL
     isolate({
       print(paste("Tab at Logout in store:", input$store$currenttab_in_store))

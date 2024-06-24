@@ -14,7 +14,6 @@ get_query <- function(query) {
 }
 
 execute <- function(query) {
-  print(paste("execute:", query))
   tryCatch({
     dbExecute(con, query)
   }, 
