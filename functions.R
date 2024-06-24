@@ -455,7 +455,7 @@ invoice_approval_received <- function(button_details, approved, reason_for_disap
   } else {
     admin <- get_ai_wa()
     body_params <- list(list('type' = 'text', 'text' = gsub("\n", " ", reason_for_disaproval)))
-    send_template(admin, body_params = body_params, template_name = "invoice_not_approved", project = sent_WA$project, invoicename = sent_WA$invoicename)
+    send_template(admin, body_params = body_params, template_name = "invoice_not_approved", heading = header, project = sent_WA$project, invoicename = sent_WA$invoicename)
     execute(paste0("UPDATE projects SET status = 'Invoiced', lastupdate = '",format(Sys.Date(), format = "%d-%m-%Y"),
                    "' WHERE projectname = '", sent_WA$project, "';"))
   }
