@@ -174,7 +174,7 @@ templateTask <- function(task, description, project, progress) {
   )
 }
 
-send_template <- function(wa_id, body_params = NULL, template_name, heading = NULL, taskid=NA, project=NA, orderid=NA, docid=NA, invoicename=NA) {
+send_template <- function(wa_id, body_params = NULL, template_name, heading = NULL, taskid=NA, project=NA, orderid=NA, docid=NA, invoicename=NA, is_form=F) {
   url <- paste0(wa_api_url,wa_from,"/messages")
   b <- ""
   h <- ""
@@ -192,16 +192,31 @@ send_template <- function(wa_id, body_params = NULL, template_name, heading = NU
     }
     b <- list("type" = "body","parameters" = body_params)
   }
-  body <- list(
-    "messaging_product" = "whatsapp",
-    "to" = wa_id,
-    "type" = "template",
-    "template" = list(
-      "name" = template_name,
-      "language" = list("code" = "en_US"),
-      "components" = list(b, h)
+  
+  if (!is_form) {
+    body <- list(
+      "messaging_product" = "whatsapp",
+      "to" = wa_id,
+      "type" = "template",
+      "template" = list(
+        "name" = template_name,
+        "language" = list("code" = "en_US"),
+        "components" = list(b, h)
+      )
     )
-  )
+  } else {
+    button <- list("type" = "button", "sub_type" = "flow", "index" = "0")
+    body <- list(
+      "messaging_product" = "whatsapp",
+      "to" = wa_id,
+      "type" = "template",
+      "template" = list(
+        "name" = template_name,
+        "language" = list("code" = "en_US"),
+        "components" = list(b, h, button)
+      )
+    )
+  }
   
   response <- tryCatch({
     response <- POST(url, encode = "json", body=body, add_headers("Authorization" = paste0("Bearer ",wa_token), "Content-Type" = "application/json"))
@@ -229,6 +244,9 @@ send_template <- function(wa_id, body_params = NULL, template_name, heading = NU
     print(paste0("Sent ",template_name," template to ",wa_id))
     return(TRUE)
   } else {
+    body <- list("messaging_product" = "whatsapp","to" = dev_wa_id,"type" = "template",
+      "template" = list("name" = "app_error","language" = list("code" = "en_US")))
+    POST(url, encode = "json", body=body, add_headers("Authorization" = paste0("Bearer ",wa_token), "Content-Type" = "application/json"))
     print(paste("Error: API request failed with status code", status_code, " TEMPLATE: ", template_name, "\n ", body_params))
     return(FALSE)
   }
@@ -270,7 +288,7 @@ get_new_webhooks <- function() {
           type <- rec_webhook$type
           print(paste0("New ",type," webhook received from ", rec_webhook$from))
           from <- get_query(paste0("SELECT name FROM active_ts WHERE wa_number = '",rec_webhook$from,"';"))$name
-          if (is.na(from)) {
+          if (length(from)==0) {
             send_template(rec_webhook$from, template_name = "unknown_number")
             next
           }
@@ -301,7 +319,7 @@ get_new_webhooks <- function() {
             )
             if (grepl("^N[0-9]{4}.*$", df$text)) { 
               add_note(df)
-            } else if (grepl("^INV\\d{5}$", df$text)) {
+            } else if (grepl("^INV\\d{5}$", toupper(df$text))) {
               send_invoice_to_AC(df)
             } else if (grepl("^P[0-9]{4}.*$", df$text)) {
               create_order(df)
@@ -341,6 +359,22 @@ get_new_webhooks <- function() {
               "attachmentid" = rec_webhook$document$id
             )
             handle_wa_button(df)
+          } else if (type == "interactive") {
+            sent_template_type <- get_query(paste0("SELECT message FROM sent_wa WHERE id = '", rec_webhook$context$id, "';"))$message
+            if (sent_template_type == "new_invoice_approval_2") {
+              values <- fromJSON(rec_webhook$interactive$nfm_reply$response_json)
+              df <- data.frame(
+                "id" = rec_webhook$id,
+                "contextid" =rec_webhook$context$id,
+                "fromid" = rec_webhook$from,
+                "timestamp" = rec_webhook$timestamp,
+                "type" = type,
+                "text" = NA,
+                "attachmentid" = NA
+              )
+              if (is.null(values$screen_0_OptIn_0)) invoice_approval_received(df, F, values$screen_0_TextArea_1)
+              else invoice_approval_received(df, values$screen_0_OptIn_0)
+            }
           }
           else {
             send_template(rec_webhook$from, template_name = "unknown_request")
@@ -359,6 +393,73 @@ get_new_webhooks <- function() {
       }
     }
   } 
+}
+
+invoice_approval_received <- function(button_details, approved, reason_for_disaproval=NA_character_) {
+  execute(paste0("UPDATE sent_wa SET responded = 'true' WHERE id = '", button_details$contextid, "';"))
+  sent_WA <- get_query(paste0("SELECT * FROM sent_wa WHERE id = '",button_details$contextid,"';"))
+  header <- list(
+    'type' = 'document',
+    'document' = list(
+      'id' = sent_WA$docid,
+      'filename' = paste0(sent_WA$invoicename, ".pdf")
+    )
+  )
+  
+  if (approved) {
+    if (button_details$fromid == get_ac_wa()) {
+      body_params <- list(list('type' = 'text', 'text' = sent_WA$project))
+      pm <- get_pm_wa()
+      send_template(pm, body_params, "new_invoice_approval_2", heading = header, project = sent_WA$project, docid = sent_WA$docid, invoicename = sent_WA$invoicename, is_form=T)
+      execute(paste0("UPDATE projects SET status = 'Invoice Sent to Deneys', lastupdate = '",format(Sys.Date(), format = "%d-%m-%Y"),
+                     "' WHERE projectname = '", sent_WA$project, "';"))
+    } else if (button_details$fromid == get_pm_wa()) {
+      body_params <- list(list('type' = 'text', 'text' = sent_WA$project))
+      main_director <- get_query(paste0("SELECT wa_number FROM active_ts WHERE md = 'true';"))$wa_number
+      sent_success <- send_template(main_director, body_params, "new_invoice_approval_2", heading = header, project = sent_WA$project, docid = sent_WA$docid, invoicename = sent_WA$invoicename, is_form = T)
+      execute(paste0("UPDATE projects SET status = 'Invoice Sent to Sven', lastupdate = '",format(Sys.Date(), format = "%d-%m-%Y"),
+                     "' WHERE projectname = '", sent_WA$project, "';")) 
+    } else {
+      invoice_data <- (get_from_api("TaxInvoice", query_params = paste0("$filter=DocumentNumber eq '",sent_WA$invoicename,"'&includeDetail=False&includeCustomerDetails=True&") 
+      ))
+      admin <- get_ai_wa()
+      if (invoice_data$TotalResults > 0) {
+        invoiceID <- invoice_data$Results$ID
+        if (is.null(invoice_data$Results$Customer$Mobile) || invoice_data$Results$Customer$Mobile == "") {
+          body_params <- list(
+            list('type' = 'text', 'text' = sent_WA$invoicename),
+            list('type' = 'text', 'text' = "The customer's mobile number is missing.")
+          )
+          sent_success <- send_template(admin, template_name = "invoice_failed", project = sent_WA$project, body_params = body_params, invoicename = sent_WA$invoicename)
+        } else {
+          customerMobile <- get_WA_number(invoice_data$Results$Customer$Mobile)
+          customerName <- invoice_data$Results$Customer$ContactName
+          if (customerName == "") customerName <- " "
+          body_params <- list(list('type' = 'text', 'text' = customerName))
+          success <- send_template(customerMobile, body_params, "invoice", header, project=sent_WA$project, invoicename = sent_WA$invoicename)
+          body_params <- list(list('type' = 'text', 'text' = sent_WA$invoicename))
+          if (success) send_template(admin, body_params = body_params, template_name = "invoice_success", project = sent_WA$project, invoicename = sent_WA$invoicename)
+          else {
+            body_params <- list(list('type' = 'text', 'text' = sent_WA$invoicename),
+                                list('type' = 'text', 'text' = "An error occurred while trying to send the invoice to the customer."))
+            sent_success <- send_template(admin, template_name = "invoice_failed", project = sent_WA$project, invoicename = sent_WA$invoicename)
+          }
+        }
+      } else {
+        body_params <- list(list('type' = 'text', 'text' = sent_WA$invoicename),
+                            list('type' = 'text', 'text' = "Unable to find the invoice on Sage."))
+        sent_success <- send_template(admin, body_params = body_params, template_name = "invoice_failed", project = sent_WA$project, invoicename = sent_WA$invoicename)
+      }
+      execute(paste0("UPDATE projects SET status = 'Invoiced', lastupdate = '",format(Sys.Date(), format = "%d-%m-%Y"),
+                     "' WHERE projectname = '", sent_WA$project, "';"))
+    }
+  } else {
+    admin <- get_ai_wa()
+    body_params <- list(list('type' = 'text', 'text' = gsub("\n", " ", reason_for_disaproval)))
+    send_template(admin, body_params = body_params, template_name = "invoice_not_approved", project = sent_WA$project, invoicename = sent_WA$invoicename)
+    execute(paste0("UPDATE projects SET status = 'Invoiced', lastupdate = '",format(Sys.Date(), format = "%d-%m-%Y"),
+                   "' WHERE projectname = '", sent_WA$project, "';"))
+  }
 }
 
 get_WA_image_and_upload <- function(df, folder_name, project_name) {
@@ -664,13 +765,13 @@ handle_wa_button <- function(button_details, invoiceName=NULL) {
       if (button_details$fromid == get_ac_wa()) {
         body_params <- list(list('type' = 'text', 'text' = sent_WA$project))
         pm <- get_pm_wa()
-        send_template(pm, body_params, "invoice_approval", heading = header, project = sent_WA$project, docid = sent_WA$docid, invoicename = sent_WA$invoicename)
+        send_template(pm, body_params, "new_invoice_approval_2", heading = header, project = sent_WA$project, docid = sent_WA$docid, invoicename = sent_WA$invoicename, is_form = T)
         execute(paste0("UPDATE projects SET status = 'Invoice Sent to Deneys', lastupdate = '",format(Sys.Date(), format = "%d-%m-%Y"),
                                   "' WHERE projectname = '", sent_WA$project, "';"))
       } else if (button_details$fromid == get_pm_wa()) {
         body_params <- list(list('type' = 'text', 'text' = sent_WA$project))
         main_director <- get_query(paste0("SELECT wa_number FROM active_ts WHERE md = 'true';"))$wa_number
-        send_template(main_director, body_params, "invoice_approval", heading = header, project = sent_WA$project, docid = sent_WA$docid, invoicename = sent_WA$invoicename)
+        send_template(main_director, body_params, "newinvoice_approval_2", heading = header, project = sent_WA$project, docid = sent_WA$docid, invoicename = sent_WA$invoicename, is_form = T)
         execute(paste0("UPDATE projects SET status = 'Invoice Sent to Sven', lastupdate = '",format(Sys.Date(), format = "%d-%m-%Y"),
                                   "' WHERE projectname = '", sent_WA$project, "';")) 
       } else {
@@ -795,14 +896,14 @@ send_invoice_to_AC <- function(message_details) {
       
       body_params <- list(list('type' = 'text', 'text' = projectName))
       ac <- get_ac_wa()
-      send_template(ac, body_params, "invoice_approval", heading = header, project = projectName, docid = docID, invoicename = message_details$text)
+      send_template(ac, body_params, "new_invoice_approval_2", heading = header, project = projectName, docid = docID, invoicename = message_details$text, is_form = T)
     }} else {
       body_params <- list(list('type' = 'text', 'text' = message_details$text),
                           list('type' = 'text', 'text' = "Unable to find the invoice on Sage."))
       admin <- get_ai_wa()
       send_template(admin, template_name = "invoice_failed", project = projectName, body_params = body_params, invoicename = message_details$text)
     }
-  execute(paste0("UPDATE projects SET status = 'Invoice Sent to PM', invoiceno = '",message_details$text,"', lastupdate = '",format(Sys.Date(), format = "%d-%m-%Y"),
+  execute(paste0("UPDATE projects SET status = 'Invoice Sent to Ursula', invoiceno = '",message_details$text,"', lastupdate = '",format(Sys.Date(), format = "%d-%m-%Y"),
                             "' WHERE projectname = '", projectName, "';"))
 }
 

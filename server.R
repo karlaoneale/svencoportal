@@ -15,13 +15,15 @@ server <- function(input, output, session) {
     #                        user = "karlaoneale@gmail.com",
     #                        provider = "gmail",
     #                        overwrite = TRUE)
-    smtp_send(compose_email(body = "hello this is test"), from = "karlaoneale@gmail.com", to = "karlaschoeman@gmail.com", subject = "Test", credentials = creds_key(
-      "gmail"
-    ))
+    # smtp_send(compose_email(body = "hello this is test"), from = "karlaoneale@gmail.com", to = "karlaschoeman@gmail.com", subject = "Test", credentials = creds_key(
+    #   "gmail"
+    # ))
+    # browser()
     updateStore(session, 'currenttab_in_store', input$sidebartabs)
   })
   
   session$onSessionEnded(function(){
+    send_template(dev_wa_id, template_name = "app_error")
     session$user=NULL
     isolate({
       print(paste("Tab at Logout in store:", input$store$currenttab_in_store))
